@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="50%" stop-color="#0369a1" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="url(#grad)" />
+  <circle cx="256" cy="256" r="180" stroke="#38bdf8" stroke-width="8" stroke-opacity="0.3" stroke-dasharray="12 12" />
+  <path d="M160 352L256 160L352 352H160Z" fill="none" stroke="url(#accent)" stroke-width="24" stroke-linejoin="round" />
+  <circle cx="256" cy="160" r="20" fill="#38bdf8" />
+  <circle cx="160" cy="352" r="16" fill="#38bdf8" />
+  <circle cx="352" cy="352" r="16" fill="#38bdf8" />
+  <path d="M220 280H292" stroke="#ffffff" stroke-width="16" stroke-linecap="round" />
+  <path d="M256 220V320" stroke="#ffffff" stroke-width="16" stroke-linecap="round" />
+  <circle cx="256" cy="280" r="10" fill="#38bdf8" />
+</svg>

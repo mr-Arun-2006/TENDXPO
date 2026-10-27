@@ -1,0 +1,112 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with role, company identity, and account credentials",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 256 },
+        "displayName": { "type": "string", "maxLength": 128 },
+        "photoURL": { "type": "string", "maxLength": 512 },
+        "role": { "type": "string", "enum": ["bid_manager", "estimator", "admin", "viewer"] },
+        "companyName": { "type": "string", "maxLength": 256 },
+        "contractorLicenseClass": { "type": "string", "maxLength": 64 },
+        "phone": { "type": "string", "maxLength": 32 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "UserSectorProfile": {
+      "title": "UserSectorProfile",
+      "description": "Target sectors and alert rules used by the Cloud Function scraper to trigger notifications",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "targetSectors": { "type": "array", "items": { "type": "string" } },
+        "minBudget": { "type": "number" },
+        "maxBudget": { "type": "number" },
+        "preferredStates": { "type": "array", "items": { "type": "string" } },
+        "emailAlertsEnabled": { "type": "boolean" },
+        "alertEmail": { "type": "string", "maxLength": 256 },
+        "inAppAlertsEnabled": { "type": "boolean" },
+        "googleChatAlertsEnabled": { "type": "boolean" },
+        "minFitScoreThreshold": { "type": "number" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "targetSectors", "emailAlertsEnabled", "alertEmail"]
+    },
+    "TenderAlert": {
+      "title": "TenderAlert",
+      "description": "Real-time tender alert triggered by the Cloud Function scraper matching the user sector profile",
+      "type": "object",
+      "properties": {
+        "alertId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "tenderId": { "type": "string", "maxLength": 128 },
+        "tenderTitle": { "type": "string", "maxLength": 256 },
+        "portal": { "type": "string", "maxLength": 128 },
+        "sector": { "type": "string", "maxLength": 128 },
+        "budget": { "type": "number" },
+        "currency": { "type": "string", "maxLength": 16 },
+        "fitScore": { "type": "number" },
+        "matchReason": { "type": "string", "maxLength": 1024 },
+        "deliveryChannels": { "type": "array", "items": { "type": "string" } },
+        "emailStatus": { "type": "string", "maxLength": 256 },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["alertId", "userId", "tenderId", "tenderTitle", "sector"]
+    },
+    "TenderBookmark": {
+      "title": "TenderBookmark",
+      "description": "Bookmarked or tracked tender in the user pipeline",
+      "type": "object",
+      "properties": {
+        "tenderId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 256 },
+        "status": { "type": "string", "maxLength": 64 },
+        "starred": { "type": "boolean" },
+        "notes": { "type": "string", "maxLength": 2048 },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["tenderId", "userId", "status"]
+    },
+    "ChatNotificationLog": {
+      "title": "ChatNotificationLog",
+      "description": "Audit trail of tender alerts dispatched to Google Chat",
+      "type": "object",
+      "properties": {
+        "spaceId": { "type": "string", "maxLength": 256 },
+        "tenderId": { "type": "string", "maxLength": 128 },
+        "message": { "type": "string", "maxLength": 4096 },
+        "sentBy": { "type": "string", "maxLength": 128 },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["spaceId", "message", "sentBy"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile, role, and corporate identity"
+    },
+    "/users/{userId}/sector_profile/{profileId}": {
+      "schema": "UserSectorProfile",
+      "description": "Sector targeting and alert criteria for Cloud Function scraper"
+    },
+    "/users/{userId}/alerts/{alertId}": {
+      "schema": "TenderAlert",
+      "description": "Automated tender alert notifications matching user profile"
+    },
+    "/users/{userId}/bookmarks/{tenderId}": {
+      "schema": "TenderBookmark",
+      "description": "Personal tender pipeline tracking and notes"
+    },
+    "/chat_notifications/{notificationId}": {
+      "schema": "ChatNotificationLog",
+      "description": "Audit trail of tender alerts dispatched to Google Chat"
+    }
+  }
+}

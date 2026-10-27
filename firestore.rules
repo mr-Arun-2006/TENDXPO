@@ -1,0 +1,142 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'email']) &&
+             data.keys().hasOnly(['uid', 'email', 'displayName', 'photoURL', 'role', 'companyName', 'contractorLicenseClass', 'phone', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             data.email is string && data.email.size() <= 256 &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 128)) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 512)) &&
+             (!('companyName' in data) || (data.companyName is string && data.companyName.size() <= 256)) &&
+             (!('contractorLicenseClass' in data) || (data.contractorLicenseClass is string && data.contractorLicenseClass.size() <= 64)) &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() <= 32)) &&
+             (!('role' in data) || (data.role in ['bid_manager', 'estimator', 'admin', 'viewer']));
+    }
+
+    function isValidSectorProfile(data, userId) {
+      return data.keys().hasAll(['userId', 'targetSectors', 'emailAlertsEnabled', 'alertEmail']) &&
+             data.userId == request.auth.uid &&
+             data.userId == userId &&
+             data.targetSectors is list && data.targetSectors.size() <= 20 &&
+             data.emailAlertsEnabled is bool &&
+             data.alertEmail is string && data.alertEmail.size() <= 256 &&
+             (!('minBudget' in data) || data.minBudget is number) &&
+             (!('maxBudget' in data) || data.maxBudget is number) &&
+             (!('preferredStates' in data) || data.preferredStates is list) &&
+             (!('inAppAlertsEnabled' in data) || data.inAppAlertsEnabled is bool) &&
+             (!('googleChatAlertsEnabled' in data) || data.googleChatAlertsEnabled is bool) &&
+             (!('minFitScoreThreshold' in data) || data.minFitScoreThreshold is number) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
+    }
+
+    function isValidTenderAlert(data, userId) {
+      return data.keys().hasAll(['alertId', 'userId', 'tenderId', 'tenderTitle', 'sector']) &&
+             data.userId == request.auth.uid &&
+             data.userId == userId &&
+             data.alertId is string && data.alertId.size() <= 128 &&
+             data.tenderId is string && data.tenderId.size() <= 128 &&
+             data.tenderTitle is string && data.tenderTitle.size() <= 256 &&
+             data.sector is string && data.sector.size() <= 128 &&
+             (!('portal' in data) || (data.portal is string && data.portal.size() <= 128)) &&
+             (!('budget' in data) || data.budget is number) &&
+             (!('currency' in data) || (data.currency is string && data.currency.size() <= 16)) &&
+             (!('fitScore' in data) || data.fitScore is number) &&
+             (!('matchReason' in data) || (data.matchReason is string && data.matchReason.size() <= 1024)) &&
+             (!('deliveryChannels' in data) || data.deliveryChannels is list) &&
+             (!('emailStatus' in data) || (data.emailStatus is string && data.emailStatus.size() <= 256)) &&
+             (!('read' in data) || data.read is bool) &&
+             (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 64));
+    }
+
+    function isValidTenderBookmark(data, userId) {
+      return data.keys().hasAll(['tenderId', 'userId', 'status']) &&
+             data.keys().hasOnly(['tenderId', 'userId', 'title', 'status', 'starred', 'notes', 'updatedAt']) &&
+             data.userId == request.auth.uid &&
+             data.tenderId is string && data.tenderId.size() <= 128 &&
+             data.status is string && data.status.size() <= 64 &&
+             (!('title' in data) || (data.title is string && data.title.size() <= 256)) &&
+             (!('starred' in data) || data.starred is bool) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 2048));
+    }
+
+    function isValidChatNotificationLog(data) {
+      return data.keys().hasAll(['spaceId', 'message', 'sentBy']) &&
+             data.keys().hasOnly(['spaceId', 'tenderId', 'message', 'sentBy', 'timestamp']) &&
+             data.sentBy == request.auth.uid &&
+             data.spaceId is string && data.spaceId.size() <= 256 &&
+             data.message is string && data.message.size() <= 4096 &&
+             (!('tenderId' in data) || (data.tenderId is string && data.tenderId.size() <= 128));
+    }
+
+    // User profiles
+    match /users/{userId} {
+      allow get: if isSignedIn() && (isOwner(userId) || isValidId(userId));
+      allow list: if false;
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming());
+      allow update: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming()) && incoming().uid == existing().uid;
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      // User Sector Profile subcollection
+      match /sector_profile/{profileId} {
+        allow get: if isOwner(userId) && isValidId(profileId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(profileId) && isValidSectorProfile(incoming(), userId);
+        allow update: if isOwner(userId) && isValidId(profileId) && isValidSectorProfile(incoming(), userId) && incoming().userId == existing().userId;
+        allow delete: if isOwner(userId) && isValidId(profileId);
+      }
+
+      // Tender Alerts subcollection (Dispatched by Cloud Function / Scraper)
+      match /alerts/{alertId} {
+        allow get: if isOwner(userId) && isValidId(alertId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(alertId) && isValidTenderAlert(incoming(), userId);
+        allow update: if isOwner(userId) && isValidId(alertId) && isValidTenderAlert(incoming(), userId) && incoming().userId == existing().userId;
+        allow delete: if isOwner(userId) && isValidId(alertId);
+      }
+
+      // Bookmarked tenders subcollection
+      match /bookmarks/{tenderId} {
+        allow get: if isOwner(userId) && isValidId(tenderId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(tenderId) && isValidTenderBookmark(incoming(), userId);
+        allow update: if isOwner(userId) && isValidId(tenderId) && isValidTenderBookmark(incoming(), userId) && incoming().userId == existing().userId;
+        allow delete: if isOwner(userId) && isValidId(tenderId);
+      }
+    }
+
+    // Google Chat dispatch notification logs
+    match /chat_notifications/{notificationId} {
+      allow get: if isSignedIn() && (existing().sentBy == request.auth.uid);
+      allow list: if isSignedIn() && resource.data.sentBy == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(notificationId) && isValidChatNotificationLog(incoming());
+      allow update, delete: if false;
+    }
+  }
+}

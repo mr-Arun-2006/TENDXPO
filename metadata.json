@@ -1,0 +1,6 @@
+{
+  "name": "TenderPulse - Real-Time Tender Intelligence & Bid PWA",
+  "description": "Enterprise Progressive Web App for monitoring official government bids, real-time portal scraping, commodity & labor cost estimation, company feasibility scoring, and strategic data-driven proposal generation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

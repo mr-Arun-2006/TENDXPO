@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+@layer base {
+  html,
+  body,
+  input,
+  button,
+  select,
+  textarea {
+    font-family: Calibri, 'Segoe UI', Candara, Segoe, Optima, Arial, sans-serif !important;
+  }
+}
