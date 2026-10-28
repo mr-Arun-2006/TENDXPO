@@ -85,7 +85,8 @@ export const TenderList: React.FC<TenderListProps> = ({
       budget: Number(customBudget),
       currency: 'INR',
       completionDurationDays: Number(customDays),
-      portal: 'CPWD / GeM Intake',
+      portal: 'Manual entry',
+      dataSource: 'user',
       refNumber: `NIT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
       location: 'Regional Zone (India)',
       state: 'State Capital',
@@ -254,6 +255,20 @@ export const TenderList: React.FC<TenderListProps> = ({
                     <span className="px-2 py-0.5 rounded-md text-[11px] text-stone-500 font-mono">
                       {tender.refNumber}
                     </span>
+                    {tender.dataSource === 'live-ted' ? (
+                      <a
+                        href={tender.sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 hover:underline"
+                      >
+                        Official notice ↗
+                      </a>
+                    ) : tender.dataSource === 'user' ? (
+                      <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-sky-50 text-sky-800 border border-sky-200">Entered by you</span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200" title="Illustrative demo data, not a real notice">Sample</span>
+                    )}
                   </div>
 
                   {/* Fit Score Badge */}

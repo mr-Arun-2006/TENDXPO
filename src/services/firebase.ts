@@ -1,10 +1,11 @@
-import { initializeApp } from 'firebase/app';
+import { getApp, getApps, initializeApp } from 'firebase/app';
 import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   updateProfile,
   onAuthStateChanged,
   User,
@@ -12,40 +13,94 @@ import {
 } from 'firebase/auth';
 import {
   getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   doc,
   getDoc,
   setDoc,
   collection,
   getDocs,
-  query,
-  where,
-  getDocFromServer,
   updateDoc,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { TenderAlert, UserAccountData, UserSectorProfile } from '../types';
+import { TenderAlert, UserSectorProfile } from '../types';
 
-// Initialize Firebase App
-export const app = initializeApp(firebaseConfig);
+// ---------------------------------------------------------------------------
+// App / Auth / Firestore initialisation
+// ---------------------------------------------------------------------------
 
-// Initialize Firestore with configured databaseId
-export const db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
+export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-// Initialize Firebase Auth
-export const auth = getAuth(app);
+const databaseId: string | undefined = (firebaseConfig as { firestoreDatabaseId?: string })
+  .firestoreDatabaseId;
 
-// Test Firestore Connection on boot
-export async function testFirestoreConnection() {
+function createFirestore() {
+  const id = databaseId && databaseId !== '(default)' ? databaseId : undefined;
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firebase Firestore client is offline or initializing.');
-    }
+    // Long-polling auto-detect avoids the "client is offline" failures that happen
+    // behind proxies / restricted networks where WebChannel streaming is blocked.
+    // The persistent cache keeps the PWA usable offline.
+    return initializeFirestore(
+      app,
+      {
+        experimentalAutoDetectLongPolling: true,
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      },
+      id as string
+    );
+  } catch {
+    // Already initialised (hot reload) or persistence unsupported: reuse / fall back.
+    return id ? getFirestore(app, id) : getFirestore(app);
   }
 }
 
-// Structured error handler according to Firebase Integration Skill
+export const db = createFirestore();
+export const auth = getAuth(app);
+
+// ---------------------------------------------------------------------------
+// Error helpers
+// ---------------------------------------------------------------------------
+
+/** Turns Firebase Auth error codes into messages a user (or you, in setup) can act on. */
+export function authErrorMessage(err: unknown): string {
+  const code = (err as { code?: string })?.code || '';
+  const raw = err instanceof Error ? err.message : String(err ?? '');
+  switch (code) {
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+    case 'auth/invalid-login-credentials':
+      return 'Incorrect email or password.';
+    case 'auth/invalid-email':
+      return 'Enter a valid email address.';
+    case 'auth/email-already-in-use':
+      return 'An account with this email already exists. Sign in instead.';
+    case 'auth/weak-password':
+      return 'Password is too weak. Use at least 8 characters.';
+    case 'auth/too-many-requests':
+      return 'Too many attempts. Wait a few minutes and try again.';
+    case 'auth/network-request-failed':
+      return 'Network error. Check your connection and try again.';
+    case 'auth/popup-blocked':
+      return 'The sign-in popup was blocked. Allow popups for this site and try again.';
+    case 'auth/operation-not-allowed':
+      return 'This sign-in method is not enabled in Firebase. Enable it under Authentication > Sign-in method.';
+    case 'auth/unauthorized-domain':
+      return `This domain is not authorised for sign-in. Add ${window.location.hostname} under Firebase Authentication > Settings > Authorized domains.`;
+    case 'auth/account-exists-with-different-credential':
+      return 'An account with this email already exists using a different sign-in method. Sign in with that method first.';
+    case 'auth/user-disabled':
+      return 'This account has been disabled.';
+    case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
+    case 'auth/user-cancelled':
+      return '';
+    default:
+      return raw || 'Authentication failed. Please try again.';
+  }
+}
+
 export enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',
@@ -57,48 +112,51 @@ export enum OperationType {
 
 export interface FirestoreErrorInfo {
   error: string;
+  code?: string;
   operationType: OperationType;
   path: string | null;
-  authInfo: {
-    userId?: string | null;
-    email?: string | null;
-    emailVerified?: boolean | null;
-    isAnonymous?: boolean | null;
-    tenantId?: string | null;
-    providerInfo?: {
-      providerId?: string | null;
-      email?: string | null;
-    }[];
-  };
+  userId?: string | null;
 }
 
+/** Logs a structured error and rethrows an Error whose message is human-readable. */
 export function handleFirestoreError(
   error: unknown,
   operationType: OperationType,
   path: string | null
-) {
-  const errInfo: FirestoreErrorInfo = {
+): never {
+  const code = (error as { code?: string })?.code;
+  const info: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo:
-        auth.currentUser?.providerData?.map((provider: any) => ({
-          providerId: provider.providerId,
-          email: provider.email,
-        })) || [],
-    },
+    code,
     operationType,
     path,
+    userId: auth.currentUser?.uid ?? null,
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  console.error('Firestore error', info);
+  throw new Error(describeFirestoreError(code, path));
 }
 
-// Google Chat OAuth scopes
+export function describeFirestoreError(code: string | undefined, path: string | null): string {
+  switch (code) {
+    case 'permission-denied':
+      return 'Database access was denied. Sign in again, or deploy firestore.rules to your Firebase project.';
+    case 'unauthenticated':
+      return 'Your session has expired. Sign in again.';
+    case 'not-found':
+      return `Firestore database "${databaseId || '(default)'}" was not found. Create it in the Firebase console or fix firestoreDatabaseId in firebase-applet-config.json.`;
+    case 'unavailable':
+      return 'Could not reach the database. You may be offline; changes will sync when you reconnect.';
+    default:
+      return `Database error${path ? ` at ${path}` : ''}. Please try again.`;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
+// Google Chat needs restricted OAuth scopes. They are requested ONLY when the
+// user explicitly connects Chat, never at ordinary sign-in.
 export const GOOGLE_CHAT_SCOPES = [
   'https://www.googleapis.com/auth/chat.spaces',
   'https://www.googleapis.com/auth/chat.spaces.readonly',
@@ -110,57 +168,106 @@ export const GOOGLE_CHAT_SCOPES = [
   'https://www.googleapis.com/auth/chat.memberships.readonly',
 ];
 
-// In-memory token cache (never stored in localStorage)
+// In-memory only; never persisted.
 let cachedAccessToken: string | null = null;
-let isSigningIn = false;
 
-const googleProvider = new GoogleAuthProvider();
-GOOGLE_CHAT_SCOPES.forEach((scope) => googleProvider.addScope(scope));
-
-export const initAuth = (
-  onAuthSuccess?: (user: User, token: string | null) => void,
-  onAuthFailure?: () => void
-) => {
-  return onAuthStateChanged(auth, async (user: User | null) => {
-    if (user) {
-      if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
-    } else {
-      cachedAccessToken = null;
-      if (onAuthFailure) onAuthFailure();
-    }
-  });
+export const getAccessToken = async (): Promise<string | null> => cachedAccessToken;
+export const setCachedAccessToken = (token: string | null) => {
+  cachedAccessToken = token;
 };
 
-export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
+/** Firebase ID token for authenticating calls to this app's own API. */
+export const getIdToken = async (forceRefresh = false): Promise<string | null> => {
+  const user = auth.currentUser;
+  if (!user) return null;
   try {
-    isSigningIn = true;
-    const result = await signInWithPopup(auth, googleProvider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.accessToken) {
-      console.warn('Google credential token empty, relying on standard Firebase Auth');
+    return await user.getIdToken(forceRefresh);
+  } catch {
+    return null;
+  }
+};
+
+export const initAuth = (
+  onAuthSuccess: (user: User, token: string | null) => void,
+  onAuthFailure: () => void
+) =>
+  onAuthStateChanged(auth, (user: User | null) => {
+    if (user) {
+      onAuthSuccess(user, cachedAccessToken);
+    } else {
+      cachedAccessToken = null;
+      onAuthFailure();
     }
-    const token = credential?.accessToken || '';
-    cachedAccessToken = token;
-    return { user: result.user, accessToken: token };
-  } catch (err: any) {
-    const errorCode = err?.code || '';
-    // Gracefully handle user-initiated dismissals or cancellations without raising console.error
-    if (
-      errorCode === 'auth/popup-closed-by-user' ||
-      errorCode === 'auth/cancelled-popup-request' ||
-      errorCode === 'auth/user-cancelled'
-    ) {
-      // User dismissed the auth popup window
-      return null;
-    }
-    if (errorCode === 'auth/popup-blocked') {
-      console.warn('Google sign-in popup was blocked by browser or iframe policy');
-      throw new Error('Sign-in popup was blocked by your browser. Please allow popups or use Email / One-Click Demo Sign-In.');
-    }
-    console.error('Google sign-in error:', err);
+  });
+
+function isCancelled(err: unknown): boolean {
+  const code = (err as { code?: string })?.code || '';
+  return (
+    code === 'auth/popup-closed-by-user' ||
+    code === 'auth/cancelled-popup-request' ||
+    code === 'auth/user-cancelled'
+  );
+}
+
+/**
+ * Creates the Firestore profile document if it does not exist yet.
+ * Never throws: auth must not fail because the profile write did.
+ */
+export const ensureUserProfile = async (
+  user: User,
+  extras: { companyName?: string; primarySector?: string } = {}
+): Promise<boolean> => {
+  try {
+    const ref = doc(db, 'users', user.uid);
+    const snap = await getDoc(ref);
+    if (snap.exists()) return true;
+
+    const email = user.email || '';
+    const profile: Record<string, unknown> = {
+      uid: user.uid,
+      email,
+      displayName: user.displayName || email.split('@')[0] || 'User',
+      role: 'estimator',
+      createdAt: new Date().toISOString(),
+    };
+    if (user.photoURL) profile.photoURL = user.photoURL;
+    if (extras.companyName) profile.companyName = extras.companyName;
+    if (extras.primarySector) profile.primarySector = extras.primarySector;
+
+    await setDoc(ref, profile);
+    return true;
+  } catch (err) {
+    console.warn('Could not save user profile (will retry on next sign-in):', err);
+    return false;
+  }
+};
+
+/** Google sign-in with basic profile + email only. */
+export const googleSignIn = async (): Promise<User | null> => {
+  try {
+    const result = await signInWithPopup(auth, new GoogleAuthProvider());
+    await ensureUserProfile(result.user);
+    return result.user;
+  } catch (err) {
+    if (isCancelled(err)) return null;
     throw err;
-  } finally {
-    isSigningIn = false;
+  }
+};
+
+/** Explicit opt-in for Google Chat: requests the Chat scopes and returns an access token. */
+export const connectGoogleChat = async (): Promise<{ user: User; accessToken: string } | null> => {
+  const provider = new GoogleAuthProvider();
+  GOOGLE_CHAT_SCOPES.forEach((scope) => provider.addScope(scope));
+  try {
+    const result = await signInWithPopup(auth, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    const token = credential?.accessToken || '';
+    cachedAccessToken = token || null;
+    await ensureUserProfile(result.user);
+    return { user: result.user, accessToken: token };
+  } catch (err) {
+    if (isCancelled(err)) return null;
+    throw err;
   }
 };
 
@@ -168,46 +275,30 @@ export const emailPasswordSignUp = async (
   email: string,
   pass: string,
   displayName: string,
-  companyName: string
+  companyName: string,
+  primarySector?: string
 ): Promise<User> => {
-  try {
-    const cred = await createUserWithEmailAndPassword(auth, email, pass);
-    if (displayName) {
+  const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
+  if (displayName) {
+    try {
       await updateProfile(cred.user, { displayName });
+    } catch (err) {
+      console.warn('Could not set display name:', err);
     }
-    // Save to Firestore
-    const userRef = doc(db, 'users', cred.user.uid);
-    await setDoc(userRef, {
-      uid: cred.user.uid,
-      email: cred.user.email || email,
-      displayName: displayName || email.split('@')[0],
-      companyName: companyName || 'Engineering & Infrastructure Ltd.',
-      role: 'estimator',
-      createdAt: new Date().toISOString(),
-    });
-    return cred.user;
-  } catch (err) {
-    console.error('Sign up error:', err);
-    throw err;
   }
+  // Account exists at this point regardless of the profile write outcome.
+  await ensureUserProfile(cred.user, { companyName, primarySector });
+  return cred.user;
 };
 
 export const emailPasswordSignIn = async (email: string, pass: string): Promise<User> => {
-  try {
-    const cred = await signInWithEmailAndPassword(auth, email, pass);
-    return cred.user;
-  } catch (err) {
-    console.error('Sign in error:', err);
-    throw err;
-  }
+  const cred = await signInWithEmailAndPassword(auth, email.trim(), pass);
+  void ensureUserProfile(cred.user);
+  return cred.user;
 };
 
-export const getAccessToken = async (): Promise<string | null> => {
-  return cachedAccessToken;
-};
-
-export const setCachedAccessToken = (token: string | null) => {
-  cachedAccessToken = token;
+export const sendPasswordReset = async (email: string): Promise<void> => {
+  await sendPasswordResetEmail(auth, email.trim());
 };
 
 export const logout = async () => {
@@ -215,24 +306,27 @@ export const logout = async () => {
   cachedAccessToken = null;
 };
 
-// ================= FIRESTORE USER PROFILE & SECTOR PROFILE =================
+// ---------------------------------------------------------------------------
+// Firestore: sector profile and alerts
+// ---------------------------------------------------------------------------
+
 export const saveUserSectorProfile = async (
   userId: string,
   profile: Partial<UserSectorProfile>
 ): Promise<void> => {
   const path = `users/${userId}/sector_profile/default`;
   try {
-    const profileRef = doc(db, 'users', userId, 'sector_profile', 'default');
+    const email = profile.alertEmail || auth.currentUser?.email || '';
     await setDoc(
-      profileRef,
+      doc(db, 'users', userId, 'sector_profile', 'default'),
       {
         userId,
         targetSectors: profile.targetSectors || ['Civil Construction'],
         minBudget: profile.minBudget ?? 1000000,
         maxBudget: profile.maxBudget ?? 100000000,
-        preferredStates: profile.preferredStates || ['All India', 'National Capital Region'],
+        preferredStates: profile.preferredStates || ['All India'],
         emailAlertsEnabled: profile.emailAlertsEnabled ?? true,
-        alertEmail: profile.alertEmail || auth.currentUser?.email || 'arunkumarak5808@gmail.com',
+        alertEmail: email,
         inAppAlertsEnabled: profile.inAppAlertsEnabled ?? true,
         googleChatAlertsEnabled: profile.googleChatAlertsEnabled ?? false,
         minFitScoreThreshold: profile.minFitScoreThreshold ?? 70,
@@ -245,45 +339,34 @@ export const saveUserSectorProfile = async (
   }
 };
 
-export const getUserSectorProfile = async (
-  userId: string
-): Promise<UserSectorProfile | null> => {
+export const getUserSectorProfile = async (userId: string): Promise<UserSectorProfile | null> => {
   const path = `users/${userId}/sector_profile/default`;
   try {
-    const profileRef = doc(db, 'users', userId, 'sector_profile', 'default');
-    const snap = await getDoc(profileRef);
-    if (snap.exists()) {
-      return snap.data() as UserSectorProfile;
-    }
-    return null;
+    const snap = await getDoc(doc(db, 'users', userId, 'sector_profile', 'default'));
+    return snap.exists() ? (snap.data() as UserSectorProfile) : null;
   } catch (err) {
     handleFirestoreError(err, OperationType.GET, path);
-    return null;
   }
 };
 
 export const getUserAlerts = async (userId: string): Promise<TenderAlert[]> => {
   const path = `users/${userId}/alerts`;
   try {
-    const colRef = collection(db, 'users', userId, 'alerts');
-    const snap = await getDocs(colRef);
+    const snap = await getDocs(collection(db, 'users', userId, 'alerts'));
     const alerts: TenderAlert[] = [];
-    snap.forEach((d) => {
-      alerts.push({ id: d.id, ...(d.data() as any) });
-    });
-    // Sort descending by createdAt
-    return alerts.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    snap.forEach((d) => alerts.push({ id: d.id, ...(d.data() as object) } as TenderAlert));
+    return alerts.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
   } catch (err) {
     handleFirestoreError(err, OperationType.LIST, path);
-    return [];
   }
 };
 
 export const markAlertAsRead = async (userId: string, alertId: string): Promise<void> => {
   const path = `users/${userId}/alerts/${alertId}`;
   try {
-    const alertRef = doc(db, 'users', userId, 'alerts', alertId);
-    await updateDoc(alertRef, { read: true });
+    await updateDoc(doc(db, 'users', userId, 'alerts', alertId), { read: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, path);
   }

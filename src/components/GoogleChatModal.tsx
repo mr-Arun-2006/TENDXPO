@@ -9,7 +9,7 @@ import {
   createChatSpace,
   CHAT_CONSOLE_CONFIG_URL,
 } from '../services/googleChat';
-import { googleSignIn, logout } from '../services/firebase';
+import { connectGoogleChat, logout } from '../services/firebase';
 import { Tender } from '../types';
 import { formatCurrency } from '../utils/formatters';
 import {
@@ -129,7 +129,7 @@ export const GoogleChatModal: React.FC<GoogleChatModalProps> = ({
     setIsLoggingIn(true);
     setErrorNotice(null);
     try {
-      const result = await googleSignIn();
+      const result = await connectGoogleChat();
       if (result) {
         onAuthSuccess(result.user, result.accessToken);
       }

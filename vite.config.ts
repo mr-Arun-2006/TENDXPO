@@ -45,6 +45,16 @@ export default defineConfig(() => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+          // Never serve the app shell for API or WebSocket paths.
+          navigateFallbackDenylist: [/^\/api\//, /^\/ws\//],
+          runtimeCaching: [
+            {
+              // Tender list and commodity data stay readable offline.
+              urlPattern: ({ url }) => url.pathname === '/api/tenders' || url.pathname === '/api/commodities',
+              handler: 'NetworkFirst',
+              options: { cacheName: 'tendo-api-data', networkTimeoutSeconds: 6, expiration: { maxEntries: 10, maxAgeSeconds: 86400 } },
+            },
+          ],
         },
         devOptions: {
           enabled: true,

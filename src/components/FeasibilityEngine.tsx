@@ -1,3 +1,4 @@
+import { apiJson } from '../services/api';
 import React, { useState } from 'react';
 import { CompanyProfile, CurrencyType, FeasibilityResult, Tender } from '../types';
 import { formatCurrency, getFitScoreColor } from '../utils/formatters';
@@ -33,6 +34,7 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
 }) => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiAuditResult, setAiAuditResult] = useState<FeasibilityResult | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const requiredTurnover = tender.eligibilityCriteria?.minAnnualTurnover || tender.budget * 0.8;
   const turnoverRatio = companyProfile.annualTurnover / requiredTurnover;
@@ -40,13 +42,12 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
 
   const handleRunAiAudit = async () => {
     setIsAnalyzing(true);
+    setAiError(null);
     try {
-      const res = await fetch('/api/gemini/analyze-bid', {
+      const data = await apiJson('/api/gemini/analyze-bid', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tender, profile: companyProfile }),
       });
-      const data = await res.json();
       if (data.status === 'success' && data.data) {
         setAiAuditResult(data.data);
         if (data.data.fitScore) {
@@ -54,7 +55,7 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
         }
       }
     } catch (err) {
-      console.error('Failed to run AI bid analysis:', err);
+      setAiError(err instanceof Error ? err.message : 'AI analysis failed.');
     } finally {
       setIsAnalyzing(false);
     }
@@ -89,6 +90,9 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
             <Sparkles className={`w-4 h-4 ${isAnalyzing ? 'animate-spin' : ''}`} />
             <span>{isAnalyzing ? 'Auditing with Gemini AI...' : 'Run AI Feasibility Audit'}</span>
           </button>
+          {aiError && (
+            <span role="alert" className="text-xs font-semibold text-rose-700">{aiError}</span>
+          )}
 
           <button
             onClick={() => onProceedToCosting(tender)}

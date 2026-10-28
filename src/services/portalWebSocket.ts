@@ -1,3 +1,4 @@
+import { apiFetch } from './api';
 import { OfficialPortal, PortalConnectionState, PortalLiveEvent, PortalMonitorHealth } from '../types';
 
 type EventListener = (event: PortalLiveEvent) => void;
@@ -235,9 +236,8 @@ class PortalWebSocketService {
       );
     } else {
       // Fallback via REST API if WebSocket is reconnecting
-      fetch('/api/cloud-functions/scraper-trigger', {
+      apiFetch('/api/cloud-functions/scraper-trigger', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sector: 'Civil Construction' }),
       }).catch((err) => console.warn('Fallback trigger error:', err));
     }
