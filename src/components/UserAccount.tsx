@@ -1,3 +1,4 @@
+import { apiJson } from '../services/api';
 import React, { useState, useEffect } from 'react';
 import {
   User as UserIcon,
@@ -57,7 +58,7 @@ export const UserAccount: React.FC<UserAccountProps> = ({
   const [minBudget, setMinBudget] = useState<number>(10000000); // ₹1 Cr
   const [maxBudget, setMaxBudget] = useState<number>(2500000000); // ₹250 Cr
   const [alertEmail, setAlertEmail] = useState<string>(
-    currentUser?.email || 'arunkumarak5808@gmail.com'
+    currentUser?.email || ''
   );
   const [emailAlertsEnabled, setEmailAlertsEnabled] = useState<boolean>(true);
   const [inAppAlertsEnabled, setInAppAlertsEnabled] = useState<boolean>(true);
@@ -77,11 +78,10 @@ export const UserAccount: React.FC<UserAccountProps> = ({
   // Load existing profile & alerts on mount
   useEffect(() => {
     const loadProfileAndAlerts = async () => {
-      const uid = currentUser?.uid || 'default_user';
+      if (!currentUser) return;
       try {
         // Fetch sector profile from server
-        const res = await fetch(`/api/user-sector-profile/${uid}`);
-        const data = await res.json();
+        const data = await apiJson('/api/user-sector-profile');
         if (data.status === 'success' && data.profile) {
           const p = data.profile;
           if (p.targetSectors) setTargetSectors(p.targetSectors);
@@ -95,8 +95,7 @@ export const UserAccount: React.FC<UserAccountProps> = ({
         }
 
         // Fetch alerts from server
-        const alertsRes = await fetch(`/api/user-alerts/${uid}`);
-        const alertsData = await alertsRes.json();
+        const alertsData = await apiJson('/api/user-alerts');
         if (alertsData.status === 'success' && alertsData.alerts) {
           setUserAlerts(alertsData.alerts);
         }
@@ -118,7 +117,7 @@ export const UserAccount: React.FC<UserAccountProps> = ({
   // Save Sector Profile to Firestore & Server
   const handleSaveSectorProfile = async () => {
     setIsSavingProfile(true);
-    const uid = currentUser?.uid || 'default_user';
+    const uid = currentUser?.uid || '';
     const profilePayload: Partial<UserSectorProfile> = {
       userId: uid,
       targetSectors,
@@ -134,9 +133,8 @@ export const UserAccount: React.FC<UserAccountProps> = ({
 
     try {
       // 1. Post to Server endpoint
-      await fetch('/api/user-sector-profile', {
+      await apiJson('/api/user-sector-profile', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(profilePayload),
       });
 
@@ -147,8 +145,7 @@ export const UserAccount: React.FC<UserAccountProps> = ({
 
       showToast('Sector Profile & Alert Rules saved successfully.');
     } catch (err) {
-      console.warn('Saved profile to backend:', err);
-      showToast('Profile preferences saved to backend engine.');
+      showToast(err instanceof Error ? err.message : 'Could not save your profile.');
     } finally {
       setIsSavingProfile(false);
     }
@@ -160,14 +157,10 @@ export const UserAccount: React.FC<UserAccountProps> = ({
     setCloudFunctionLogs(['Initiating Cloud Function: tenderAlertMatcher_v1...']);
     setLastDispatchedAlert(null);
 
-    const uid = currentUser?.uid || 'default_user';
-
     try {
-      const res = await fetch('/api/cloud-functions/scraper-trigger', {
+      const data = await apiJson('/api/cloud-functions/scraper-trigger', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: uid,
           sector: targetSectors[0] || 'Civil Construction',
           profileOverride: {
             targetSectors,
@@ -182,7 +175,6 @@ export const UserAccount: React.FC<UserAccountProps> = ({
         }),
       });
 
-      const data = await res.json();
       if (data.status === 'success') {
         setCloudFunctionLogs(data.trace || []);
         if (data.matchedAlert) {
@@ -192,14 +184,13 @@ export const UserAccount: React.FC<UserAccountProps> = ({
         showToast('Cloud Function triggered: New matching bid scraped and alert dispatched!');
       }
     } catch (err) {
-      console.error('Cloud Function execution error:', err);
-      showToast('Cloud Function invocation completed with simulation fallback.');
+      showToast(err instanceof Error ? err.message : 'Alert matcher could not run.');
     } finally {
       setIsExecutingCloudFunction(false);
     }
   };
 
-  const displayName = currentUser?.displayName || 'Arun Kumar';
+  const displayName = currentUser?.displayName || currentUser?.email?.split('@')[0] || 'User';
   const email = currentUser?.email || alertEmail;
   const initial = displayName.charAt(0).toUpperCase();
 
@@ -221,12 +212,12 @@ export const UserAccount: React.FC<UserAccountProps> = ({
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-xl font-black text-stone-900">{displayName}</h2>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#4d6b2f]/10 text-[#3f5724] border border-[#4d6b2f]/30">
-                Chief Bid Estimator & Manager
+                Bid Estimator
               </span>
             </div>
             <p className="text-xs text-stone-500 font-mono">{email}</p>
             <p className="text-xs text-stone-600 font-medium">
-              Apex Infrastructure & Tech Consortium Ltd. • CPWD Class-1 Civil License
+              Signed in with {currentUser?.providerData?.[0]?.providerId === 'google.com' ? 'Google' : 'email'}
             </p>
           </div>
         </div>
@@ -482,7 +473,7 @@ export const UserAccount: React.FC<UserAccountProps> = ({
                       type="email"
                       value={alertEmail}
                       onChange={(e) => setAlertEmail(e.target.value)}
-                      placeholder="arunkumarak5808@gmail.com"
+                      placeholder="you@company.com"
                       className="w-full px-3 py-1.5 rounded-xl border border-stone-300 text-xs font-mono focus:outline-none focus:border-[#4d6b2f] bg-white"
                     />
                   </div>

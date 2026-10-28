@@ -13,6 +13,7 @@
         "companyName": { "type": "string", "maxLength": 256 },
         "contractorLicenseClass": { "type": "string", "maxLength": 64 },
         "phone": { "type": "string", "maxLength": 32 },
+        "primarySector": { "type": "string", "maxLength": 64 },
         "createdAt": { "type": "string" }
       },
       "required": ["uid", "email"]

@@ -70,6 +70,9 @@ export interface Tender {
   documents: TenderDocument[];
   defaultBiddingTemplate: string;
   customNotes?: string;
+  /** 'live-ted' = fetched from an official API; 'sample' = demo data; 'user' = entered manually */
+  dataSource?: 'live-ted' | 'sample' | 'user';
+  sourceUrl?: string;
 }
 
 export interface CompanyProfile {

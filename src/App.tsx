@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { BidCalculation, BOQItem, CommodityPrice, CompanyProfile, CurrencyType, PortalNotification, Tender, TenderStatus } from './types';
 import { DEFAULT_COMPANY_PROFILE, INITIAL_NOTIFICATIONS, SECTOR_BOQ_TEMPLATES } from './data/initialData';
-import { Header } from './components/Header';
+import { AppShell } from './components/AppShell';
+import { PublicNav } from './components/PublicNav';
 import { LandingPage } from './components/LandingPage';
-import { AuthModal } from './components/AuthModal';
+import { AuthPage, AuthMode } from './components/AuthPage';
+import { AssistantChat } from './components/AssistantChat';
+import { OfficialSources } from './components/OfficialSources';
 import { UserAccount } from './components/UserAccount';
 import { TenderList } from './components/TenderList';
 import { CostEstimationEngine } from './components/CostEstimationEngine';
@@ -15,14 +18,25 @@ import { CompanyProfileModal } from './components/CompanyProfileModal';
 import { NotificationsModal } from './components/NotificationsModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { GoogleChatModal } from './components/GoogleChatModal';
-import { PortalWebSocketBar } from './components/PortalWebSocketBar';
-import { PortalWebSocketModal } from './components/PortalWebSocketModal';
 import { usePortalWebSocket } from './hooks/usePortalWebSocket';
 import { User } from 'firebase/auth';
-import { initAuth, logout, testFirestoreConnection } from './services/firebase';
+import { initAuth, logout } from './services/firebase';
+import { apiFetch } from './services/api';
+
+const APP_TABS = ['tenders','assistant','pipeline','feasibility','costing','proposal','commodities','sources','account'];
+
+/** Hash routes: '' (landing), 'login', 'register', or 'app/<tab>'. */
+function parseHash(): string {
+  return window.location.hash.replace(/^#\/?/, '');
+}
+
+function navigateTo(route: string) {
+  const next = route ? `#/${route}` : '#/';
+  if (window.location.hash !== next) window.location.hash = next;
+}
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<string>('landing');
+  const [route, setRoute] = useState<string>(() => parseHash());
   const [currency, setCurrency] = useState<CurrencyType>('INR');
   const [tenders, setTenders] = useState<Tender[]>([]);
   const [commodities, setCommodities] = useState<CommodityPrice[]>([]);
@@ -41,9 +55,6 @@ export default function App() {
   const [showProfileModal, setShowProfileModal] = useState<boolean>(false);
   const [showNotificationsModal, setShowNotificationsModal] = useState<boolean>(false);
   const [showGoogleChatModal, setShowGoogleChatModal] = useState<boolean>(false);
-  const [showPortalRadarModal, setShowPortalRadarModal] = useState<boolean>(false);
-  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Real-Time Official Portals WebSocket Hook
@@ -51,6 +62,7 @@ export default function App() {
 
   // Firebase & Google Workspace Auth state
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState<boolean>(false);
   const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -68,21 +80,21 @@ export default function App() {
           if (prev.some((t) => t.id === latest.tenderData!.id || t.refNumber === latest.tenderData!.refNumber)) {
             return prev;
           }
-          return [latest.tenderData!, ...prev];
+          return [{ ...latest.tenderData!, dataSource: 'sample' as const }, ...prev];
         });
 
         const notif: PortalNotification = {
           id: `notif-${latest.id}`,
           timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
           type: 'New Tender',
-          title: `🚨 [${latest.portal}] New Tender Published`,
+          title: `[Simulated feed] ${latest.portal}: new tender`,
           message: `${latest.title} (₹${((latest.budget || 0) / 10000000).toFixed(2)} Cr)`,
           tenderId: latest.tenderData.id,
           severity: 'success',
           read: false,
         };
         setNotifications((prev) => [notif, ...prev]);
-        showToast(`⚡ [${latest.portal}] Official Tender: ${latest.title.slice(0, 38)}...`);
+        showToast(`Simulated feed: ${latest.title.slice(0, 38)}...`);
       } else if (latest.eventType === 'corrigendum_issued') {
         const notif: PortalNotification = {
           id: `notif-${latest.id}`,
@@ -101,13 +113,17 @@ export default function App() {
     }
   }, [liveEvents]);
 
-  // Fetch initial tenders
-  const fetchTenders = async () => {
+  // Fetch tenders (official TED notices + clearly labelled sample data)
+  const fetchTenders = async (refresh = false) => {
     try {
-      const res = await fetch('/api/tenders');
+      const res = await fetch(refresh ? '/api/tenders?refresh=1' : '/api/tenders');
       const data = await res.json();
       if (data.status === 'success' && data.tenders) {
-        setTenders(data.tenders);
+        // Keep tenders the user entered by hand; everything else comes from the server.
+        setTenders((prev) => [
+          ...data.tenders,
+          ...prev.filter((t) => t.dataSource === 'user' && !data.tenders.some((x: Tender) => x.id === t.id)),
+        ]);
         if (!selectedTender && data.tenders.length > 0) {
           setSelectedTender(data.tenders[0]);
         }
@@ -148,17 +164,17 @@ export default function App() {
     fetchCommodities();
     fetchProfile();
 
-    // Test Firestore connection on boot (Firebase Integration Skill constraint)
-    testFirestoreConnection();
-
     // Listen to Firebase Auth state
     const unsubscribe = initAuth(
       (user, token) => {
         setCurrentUser(user);
         if (token) setGoogleAccessToken(token);
+        setAuthReady(true);
       },
       () => {
-        // Fallback or unauthenticated state
+        setCurrentUser(null);
+        setGoogleAccessToken(null);
+        setAuthReady(true);
       }
     );
     return () => {
@@ -166,40 +182,36 @@ export default function App() {
     };
   }, []);
 
-  // Trigger Live Portal Scrape
-  const handleTriggerScrape = async () => {
-    setIsScraping(true);
-    showToast('Connecting to GeM, CPPP, SAM.gov & TED Europa portals...');
-    try {
-      const res = await fetch('/api/scrape-portal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: currentUser?.uid || 'default_user' }),
-      });
-      const data = await res.json();
-      if (data.status === 'success') {
-        if (data.newTender) {
-          setTenders((prev) => [data.newTender, ...prev]);
-          // Add notification
-          const newNotif: PortalNotification = {
-            id: `notif-${Date.now()}`,
-            timestamp: 'Just now',
-            type: 'New Tender',
-            title: `New Scraped Bid: ${data.newTender.title.slice(0, 40)}...`,
-            message: `Official Portal: ${data.newTender.portal}. NIT Budget: ₹${data.newTender.budget.toLocaleString()}. Cloud function evaluated.`,
-            tenderId: data.newTender.id,
-            severity: 'info',
-            read: false,
-          };
-          setNotifications((prev) => [newNotif, ...prev]);
-        }
-        showToast(data.message || 'Scraping complete. Fresh official bids indexed.');
-      }
-    } catch (err) {
-      showToast('Offline mode: Local tenders maintained.');
-    } finally {
-      setIsScraping(false);
+  // Keep route in sync with the URL hash (back/forward buttons work).
+  useEffect(() => {
+    const onHash = () => setRoute(parseHash());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  // Route guard: private pages need a session; signed-in users skip the public pages.
+  useEffect(() => {
+    if (!authReady) return;
+    const isApp = route.startsWith('app/');
+    const isPublicAuth = route === 'login' || route === 'register';
+    if (isApp && !currentUser) {
+      navigateTo('login');
+    } else if (currentUser && (route === '' || isPublicAuth)) {
+      navigateTo('app/tenders');
+    } else if (isApp && !APP_TABS.includes(route.slice(4))) {
+      navigateTo('app/tenders');
     }
+  }, [authReady, currentUser, route]);
+
+  const activeTab = route.startsWith('app/') ? route.slice(4) : 'landing';
+  const setActiveTab = (tab: string) => navigateTo(tab === 'landing' ? '' : `app/${tab}`);
+
+  // Refresh the tender feed from official sources
+  const handleRefreshFeed = async () => {
+    setIsScraping(true);
+    await fetchTenders(true);
+    setIsScraping(false);
+    showToast('Tender feed refreshed from official sources.');
   };
 
   // User adds custom tender
@@ -216,9 +228,8 @@ export default function App() {
       prev.map((t) => (t.id === tenderId ? { ...t, status, customNotes: notes || t.customNotes } : t))
     );
     try {
-      await fetch(`/api/tenders/${tenderId}/status`, {
+      await apiFetch(`/api/tenders/${tenderId}/status`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status, customNotes: notes }),
       });
       showToast(`Updated tender stage to "${status}".`);
@@ -283,55 +294,84 @@ export default function App() {
       workerCount: 121,
     };
 
-  return (
-    <div className="min-h-full flex flex-col bg-stone-50 text-stone-900 font-sans selection:bg-[#4d6b2f] selection:text-white">
-      {/* Global Header */}
-      <Header
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        currency={currency}
-        setCurrency={setCurrency}
-        isScraping={isScraping}
-        onTriggerScrape={handleTriggerScrape}
-        notifications={notifications}
-        onOpenNotifications={() => setShowNotificationsModal(true)}
-        onOpenProfile={() => setShowProfileModal(true)}
-        onOpenGoogleChat={() => setShowGoogleChatModal(true)}
-        isGoogleChatConnected={!!currentUser}
-        companyName={companyProfile.name}
-        activeBidsCount={tenders.length}
-        profilePhoto={currentUser?.photoURL || companyProfile.profilePhoto}
-        currentUser={currentUser}
-        onOpenAuth={() => {
-          setAuthMode('login');
-          setShowAuthModal(true);
-        }}
-      />
+  const goLogin = () => navigateTo('login');
+  const goRegister = () => navigateTo('register');
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Landing Page View */}
-        {activeTab === 'landing' && (
+  const emptyState = (
+    <div className="p-8 rounded-3xl bg-white border border-stone-200 text-center">
+      <p className="text-sm text-stone-600">Select a tender first to use this tool.</p>
+      <button onClick={() => setActiveTab('tenders')} className="mt-4 h-10 px-5 rounded-xl bg-[#4d6b2f] text-white text-sm font-bold">
+        Browse tenders
+      </button>
+    </div>
+  );
+
+  // Splash while Firebase restores the session (prevents a login-page flash).
+  if (!authReady) {
+    return (
+      <div className="min-h-[100dvh] flex items-center justify-center bg-stone-50">
+        <div className="w-10 h-10 border-4 border-[#4d6b2f]/25 border-t-[#4d6b2f] rounded-full animate-spin" role="status" aria-label="Loading" />
+      </div>
+    );
+  }
+
+  // ---------- Public flow: landing -> register / login ----------
+  if (!currentUser) {
+    if (route === 'login' || route === 'register') {
+      return (
+        <>
+          <AuthPage
+            mode={route as AuthMode}
+            onModeChange={(m) => navigateTo(m)}
+            onBack={() => navigateTo('')}
+            onSuccess={(user) => {
+              setCurrentUser(user);
+              navigateTo('app/tenders');
+            }}
+          />
+          <OfflineIndicator />
+        </>
+      );
+    }
+    return (
+      <div className="min-h-[100dvh] bg-stone-50 text-stone-900">
+        <PublicNav onSignIn={goLogin} onRegister={goRegister} />
+        <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <LandingPage
-            onGetStarted={() => {
-              setAuthMode('register');
-              setShowAuthModal(true);
-            }}
-            onSignIn={() => {
-              setAuthMode('login');
-              setShowAuthModal(true);
-            }}
-            onExploreWorkspace={() => setActiveTab('tenders')}
-            onOpenTender={(t) => {
-              setSelectedTender(t);
-              setActiveTab('costing');
-            }}
+            onGetStarted={goRegister}
+            onSignIn={goLogin}
+            onExploreWorkspace={goLogin}
+            onOpenTender={goLogin}
             tenders={tenders}
             commodities={commodities}
           />
-        )}
+        </main>
+        <OfflineIndicator />
+      </div>
+    );
+  }
 
-        {/* User Account / Sector Alerts View */}
+  // ---------- Private app ----------
+  return (
+    <>
+      <AppShell
+        activeTab={activeTab}
+        onNavigate={setActiveTab}
+        user={currentUser}
+        unreadCount={notifications.filter((n) => !n.read).length}
+        isRefreshing={isScraping}
+        onRefresh={handleRefreshFeed}
+        onOpenNotifications={() => setShowNotificationsModal(true)}
+        onOpenProfile={() => setShowProfileModal(true)}
+        onOpenGoogleChat={() => setShowGoogleChatModal(true)}
+        onLogout={async () => {
+          await logout();
+          setCurrentUser(null);
+          setGoogleAccessToken(null);
+          showToast('Signed out.');
+          navigateTo('');
+        }}
+      >
         {activeTab === 'account' && (
           <UserAccount
             currentUser={currentUser}
@@ -339,8 +379,7 @@ export default function App() {
               await logout();
               setCurrentUser(null);
               setGoogleAccessToken(null);
-              showToast('Signed out of TenDo account.');
-              setActiveTab('landing');
+              navigateTo('');
             }}
             onSelectTender={(tenderId) => {
               const t = tenders.find((item) => item.id === tenderId);
@@ -356,7 +395,6 @@ export default function App() {
           />
         )}
 
-        {/* Official Portals View */}
         {activeTab === 'tenders' && (
           <TenderList
             tenders={tenders}
@@ -368,30 +406,33 @@ export default function App() {
           />
         )}
 
-        {/* BOQ Cost Estimation Engine */}
-        {activeTab === 'costing' && selectedTender && (
-          <CostEstimationEngine
-            tender={selectedTender}
-            currency={currency}
-            commodities={commodities}
-            companyProfile={companyProfile}
-            onProceedToProposal={handleProceedToProposalFromCosting}
-            onRefreshCommodities={fetchCommodities}
-          />
-        )}
+        {activeTab === 'assistant' && <AssistantChat tender={selectedTender} />}
 
-        {/* Bid Feasibility Matrix */}
-        {activeTab === 'feasibility' && selectedTender && (
-          <FeasibilityEngine
-            tender={selectedTender}
-            companyProfile={companyProfile}
-            currency={currency}
-            onProceedToCosting={handleSelectForCosting}
-            onUpdateTenderFitScore={handleUpdateFitScore}
-          />
-        )}
+        {activeTab === 'sources' && <OfficialSources />}
 
-        {/* Pipeline Tracker */}
+        {activeTab === 'costing' &&
+          (selectedTender ? (
+            <CostEstimationEngine
+              tender={selectedTender}
+              currency={currency}
+              commodities={commodities}
+              companyProfile={companyProfile}
+              onProceedToProposal={handleProceedToProposalFromCosting}
+              onRefreshCommodities={fetchCommodities}
+            />
+          ) : emptyState)}
+
+        {activeTab === 'feasibility' &&
+          (selectedTender ? (
+            <FeasibilityEngine
+              tender={selectedTender}
+              companyProfile={companyProfile}
+              currency={currency}
+              onProceedToCosting={handleSelectForCosting}
+              onUpdateTenderFitScore={handleUpdateFitScore}
+            />
+          ) : emptyState)}
+
         {activeTab === 'pipeline' && (
           <PipelineTracker
             tenders={tenders}
@@ -404,59 +445,44 @@ export default function App() {
           />
         )}
 
-        {/* Proposal Explainer & PDF Generator */}
-        {activeTab === 'proposal' && selectedTender && (
-          <ProposalGenerator
-            tender={selectedTender}
-            calculation={currentCalc}
-            boqItems={activeBOQItems}
-            companyProfile={companyProfile}
-            currency={currency}
-            onAdvanceToSubmitted={() => {
-              handleUpdateTenderStatus(selectedTender.id, 'Submitted');
-              setActiveTab('pipeline');
-            }}
-          />
-        )}
+        {activeTab === 'proposal' &&
+          (selectedTender ? (
+            <ProposalGenerator
+              tender={selectedTender}
+              calculation={currentCalc}
+              boqItems={activeBOQItems}
+              companyProfile={companyProfile}
+              currency={currency}
+              onAdvanceToSubmitted={() => {
+                handleUpdateTenderStatus(selectedTender.id, 'Submitted');
+                setActiveTab('pipeline');
+              }}
+            />
+          ) : emptyState)}
 
-        {/* Commodity Volatility Tracker */}
         {activeTab === 'commodities' && (
           <CommodityTracker
             commodities={commodities}
             currency={currency}
             onRefresh={() => {
               fetchCommodities();
-              showToast('Commodity index refreshed with spot rates.');
+              showToast('Commodity index refreshed.');
             }}
           />
         )}
-      </main>
+      </AppShell>
 
-      {/* Floating Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-2xl bg-white border border-[#4d6b2f]/40 text-xs font-bold text-stone-900 shadow-xl backdrop-blur-md animate-fade-in flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-[#4d6b2f] animate-ping"></span>
-          <span>{toastMessage}</span>
+        <div
+          role="status"
+          className="fixed z-50 left-3 right-3 sm:left-auto sm:right-6 bottom-24 lg:bottom-6 px-4 py-3 rounded-2xl bg-stone-900 text-white text-sm font-semibold shadow-xl"
+        >
+          {toastMessage}
         </div>
       )}
 
-      {/* PWA Offline Banner */}
       <OfflineIndicator />
 
-      {/* Authentication Modal (Register & Login) */}
-      <AuthModal
-        isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-        initialMode={authMode}
-        onAuthSuccess={(user, token) => {
-          setCurrentUser(user);
-          if (token) setGoogleAccessToken(token);
-          showToast(`Welcome ${user.displayName || user.email}!`);
-          setActiveTab('account');
-        }}
-      />
-
-      {/* Profile Modal */}
       <CompanyProfileModal
         isOpen={showProfileModal}
         onClose={() => setShowProfileModal(false)}
@@ -464,11 +490,10 @@ export default function App() {
         currency={currency}
         onSaveProfile={(updated) => {
           setCompanyProfile((prev) => ({ ...prev, ...updated }));
-          showToast('Updated company operational capacity.');
+          showToast('Company profile updated.');
         }}
       />
 
-      {/* Notifications Drawer Modal */}
       <NotificationsModal
         isOpen={showNotificationsModal}
         onClose={() => setShowNotificationsModal(false)}
@@ -486,7 +511,6 @@ export default function App() {
         }}
       />
 
-      {/* Google Chat Collaboration Modal */}
       <GoogleChatModal
         isOpen={showGoogleChatModal}
         onClose={() => setShowGoogleChatModal(false)}
@@ -495,15 +519,15 @@ export default function App() {
         onAuthSuccess={(user, token) => {
           setCurrentUser(user);
           setGoogleAccessToken(token);
-          showToast(`Connected to Google as ${user.displayName || user.email}`);
+          showToast(`Connected to Google Chat as ${user.displayName || user.email}`);
         }}
         onAuthLogout={() => {
           setCurrentUser(null);
           setGoogleAccessToken(null);
-          showToast('Signed out of Google Workspace.');
+          navigateTo('');
         }}
         activeTender={selectedTender}
       />
-    </div>
+    </>
   );
 }

@@ -2,8 +2,10 @@ import express from 'express';
 import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 import { GoogleGenAI } from '@google/genai';
 
 dotenv.config();
@@ -15,7 +17,98 @@ const app = express();
 const server = http.createServer(app);
 const PORT = Number(process.env.PORT) || 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
+
+// ---------------------------------------------------------------------------
+// Firebase ID-token verification (no firebase-admin dependency).
+// Verifies RS256 signature against Google's public keys + standard claims.
+// ---------------------------------------------------------------------------
+const FIREBASE_PROJECT_ID =
+  process.env.FIREBASE_PROJECT_ID ||
+  (() => {
+    try {
+      return JSON.parse(
+        fs.readFileSync(path.resolve(__dirname, 'firebase-applet-config.json'), 'utf8')
+      ).projectId as string;
+    } catch {
+      return '';
+    }
+  })();
+
+const JWKS_URL =
+  'https://www.googleapis.com/robot/v1/metadata/jwk/securetoken@system.gserviceaccount.com';
+let jwksCache: { keys: Record<string, any>[]; expires: number } = { keys: [], expires: 0 };
+
+async function getJwks() {
+  if (Date.now() < jwksCache.expires && jwksCache.keys.length) return jwksCache.keys;
+  const res = await fetch(JWKS_URL);
+  if (!res.ok) throw new Error(`JWKS fetch failed: ${res.status}`);
+  const body = (await res.json()) as { keys: Record<string, any>[] };
+  const maxAge = Number(/max-age=(\d+)/.exec(res.headers.get('cache-control') || '')?.[1] || 3600);
+  jwksCache = { keys: body.keys, expires: Date.now() + maxAge * 1000 };
+  return body.keys;
+}
+
+const b64urlToBuf = (v: string) => Buffer.from(v.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+
+async function verifyFirebaseIdToken(token: string): Promise<{ uid: string; email?: string }> {
+  const parts = token.split('.');
+  if (parts.length !== 3) throw new Error('Malformed token');
+  const header = JSON.parse(b64urlToBuf(parts[0]).toString('utf8'));
+  const payload = JSON.parse(b64urlToBuf(parts[1]).toString('utf8'));
+  if (header.alg !== 'RS256' || !header.kid) throw new Error('Unsupported token header');
+
+  const jwk = (await getJwks()).find((k) => k.kid === header.kid);
+  if (!jwk) throw new Error('Unknown signing key');
+  const ok = crypto.verify(
+    'RSA-SHA256',
+    Buffer.from(`${parts[0]}.${parts[1]}`),
+    crypto.createPublicKey({ key: jwk as crypto.JsonWebKey, format: 'jwk' }),
+    b64urlToBuf(parts[2])
+  );
+  if (!ok) throw new Error('Bad signature');
+
+  const now = Math.floor(Date.now() / 1000);
+  if (!FIREBASE_PROJECT_ID) throw new Error('FIREBASE_PROJECT_ID not configured');
+  if (payload.aud !== FIREBASE_PROJECT_ID) throw new Error('Wrong audience');
+  if (payload.iss !== `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`) throw new Error('Wrong issuer');
+  if (typeof payload.exp !== 'number' || payload.exp < now) throw new Error('Token expired');
+  if (typeof payload.iat !== 'number' || payload.iat > now + 300) throw new Error('Token issued in the future');
+  if (!payload.sub || typeof payload.sub !== 'string') throw new Error('Missing subject');
+  return { uid: payload.sub, email: payload.email };
+}
+
+type AuthedRequest = express.Request & { user?: { uid: string; email?: string } };
+
+/** Requires `Authorization: Bearer <Firebase ID token>`. Sets req.user. */
+const requireAuth: express.RequestHandler = async (req, res, next) => {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (!token) return res.status(401).json({ status: 'error', message: 'Sign in required.' });
+  try {
+    (req as AuthedRequest).user = await verifyFirebaseIdToken(token);
+    next();
+  } catch (err: any) {
+    res.status(401).json({ status: 'error', message: 'Invalid or expired session. Sign in again.' });
+  }
+};
+
+/** Very small in-memory rate limiter for the AI endpoints (per user). */
+const aiHits = new Map<string, number[]>();
+const aiRateLimit: express.RequestHandler = (req, res, next) => {
+  const uid = (req as AuthedRequest).user?.uid || req.ip || 'anon';
+  const now = Date.now();
+  const recent = (aiHits.get(uid) || []).filter((t) => now - t < 60_000);
+  if (recent.length >= 20) {
+    return res.status(429).json({ status: 'error', message: 'Too many AI requests. Try again in a minute.' });
+  }
+  recent.push(now);
+  aiHits.set(uid, recent);
+  next();
+};
+
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+
 
 // Initialize Google GenAI on server
 let aiClient: GoogleGenAI | null = null;
@@ -1063,10 +1156,10 @@ function executeCloudFunctionTenderMatch(newTender: any, targetUserId?: string) 
 }
 
 // API: Cloud Function - Trigger Scraper & Sector Profile Notification Matcher
-app.post('/api/cloud-functions/scraper-trigger', (req, res) => {
-  const { sector, userId, profileOverride } = req.body || {};
+app.post('/api/cloud-functions/scraper-trigger', requireAuth, (req, res) => {
+  const { sector, profileOverride } = req.body || {};
 
-  const targetId = userId || 'default_user';
+  const targetId = (req as AuthedRequest).user!.uid;
   if (profileOverride) {
     sectorProfilesMap[targetId] = {
       ...sectorProfilesMap[targetId],
@@ -1174,16 +1267,16 @@ app.post('/api/cloud-functions/scraper-trigger', (req, res) => {
 });
 
 // API: Get User Sector Profile
-app.get('/api/user-sector-profile/:userId', (req, res) => {
-  const { userId } = req.params;
+app.get('/api/user-sector-profile', requireAuth, (req, res) => {
+  const userId = (req as AuthedRequest).user!.uid;
   const profile = sectorProfilesMap[userId] || sectorProfilesMap.default_user;
   res.json({ status: 'success', profile });
 });
 
 // API: Save / Update User Sector Profile
-app.post('/api/user-sector-profile', (req, res) => {
+app.post('/api/user-sector-profile', requireAuth, (req, res) => {
   const profileData = req.body || {};
-  const userId = profileData.userId || 'default_user';
+  const userId = (req as AuthedRequest).user!.uid;
   sectorProfilesMap[userId] = {
     ...sectorProfilesMap[userId],
     ...profileData,
@@ -1198,9 +1291,9 @@ app.post('/api/user-sector-profile', (req, res) => {
 });
 
 // API: Get User Alerts
-app.get('/api/user-alerts/:userId', (req, res) => {
-  const { userId } = req.params;
-  const userAlerts = triggeredAlerts.filter((a) => a.userId === userId || a.userId === 'default_user');
+app.get('/api/user-alerts', requireAuth, (req, res) => {
+  const userId = (req as AuthedRequest).user!.uid;
+  const userAlerts = triggeredAlerts.filter((a) => a.userId === userId);
   res.json({
     status: 'success',
     alerts: userAlerts,
@@ -1209,9 +1302,9 @@ app.get('/api/user-alerts/:userId', (req, res) => {
 });
 
 // API: Mark Alert As Read
-app.post('/api/user-alerts/:alertId/read', (req, res) => {
+app.post('/api/user-alerts/:alertId/read', requireAuth, (req, res) => {
   const { alertId } = req.params;
-  const alert = triggeredAlerts.find((a) => a.id === alertId);
+  const alert = triggeredAlerts.find((a) => a.id === alertId && a.userId === (req as AuthedRequest).user!.uid);
   if (alert) alert.read = true;
   res.json({ status: 'success', message: 'Alert marked as read' });
 });
@@ -1236,17 +1329,23 @@ app.get('/api/portals', (req, res) => {
 });
 
 // API: List All Tenders
-app.get('/api/tenders', (req, res) => {
+app.get('/api/tenders', async (req, res) => {
+  if (req.query.refresh === '1' && Date.now() - tedCache.at > 60_000) tedCache.at = 0;
+  const live = await fetchTedTenders();
+  const local = activeTenders.map((t: any) => ({ dataSource: 'sample', ...t }));
+  const all = [...live, ...local];
   res.json({
     status: 'success',
-    count: activeTenders.length,
-    tenders: activeTenders,
+    count: all.length,
+    liveCount: live.length,
+    tenders: all,
   });
 });
 
 // API: Scrape / Refresh Portals with Auto-Cloud Function Trigger
-app.post('/api/scrape-portal', (req, res) => {
-  const { portalId, sector, userId } = req.body || {};
+app.post('/api/scrape-portal', requireAuth, (req, res) => {
+  const { portalId, sector } = req.body || {};
+  const userId = (req as AuthedRequest).user!.uid;
   
   const scrapedCount = Math.floor(Math.random() * 2) + 1;
   const newRefNumber = `NIT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -1307,7 +1406,7 @@ app.post('/api/scrape-portal', (req, res) => {
 });
 
 // API: Update Tender Status (For Pipeline Tracking)
-app.post('/api/tenders/:id/status', (req, res) => {
+app.post('/api/tenders/:id/status', requireAuth, (req, res) => {
   const { id } = req.params;
   const { status, companyFitScore, customNotes } = req.body;
 
@@ -1335,7 +1434,7 @@ app.get('/api/company-profile', (req, res) => {
 });
 
 // API: Update Company Profile
-app.post('/api/company-profile', (req, res) => {
+app.post('/api/company-profile', requireAuth, (req, res) => {
   const updates = req.body || {};
   companyProfile = { ...companyProfile, ...updates };
   res.json({
@@ -1345,7 +1444,7 @@ app.post('/api/company-profile', (req, res) => {
 });
 
 // API: Gemini-Powered Feasibility Analysis
-app.post('/api/gemini/analyze-bid', async (req, res) => {
+app.post('/api/gemini/analyze-bid', requireAuth, aiRateLimit, async (req, res) => {
   const { tender, profile } = req.body;
   if (!tender) {
     return res.status(400).json({ status: 'error', message: 'Tender payload required' });
@@ -1390,7 +1489,7 @@ Provide a comprehensive, highly structured feasibility audit in JSON format with
 }`;
 
       const response = await aiClient.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: GEMINI_MODEL,
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
@@ -1464,7 +1563,7 @@ Provide a comprehensive, highly structured feasibility audit in JSON format with
 });
 
 // API: Gemini-Powered Proposal & Budget Explainer Generator
-app.post('/api/gemini/generate-proposal', async (req, res) => {
+app.post('/api/gemini/generate-proposal', requireAuth, aiRateLimit, async (req, res) => {
   const { tender, costing, profile, language } = req.body;
   if (!tender || !costing) {
     return res.status(400).json({ status: 'error', message: 'Tender and costing calculation required' });
@@ -1519,7 +1618,7 @@ Return a structured JSON with:
 }`;
 
       const response = await aiClient.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: GEMINI_MODEL,
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
@@ -1565,6 +1664,163 @@ Return a structured JSON with:
       competitiveEdgeStatement: `By combining internal heavy machinery ownership, direct mill procurement agreements, and an unblemished ${p.pastPerformanceRating}/5 track record, ${p.name} guarantees on-time project completion with zero cost overrun claims, providing the Tender Inviting Authority with maximum reliability and fiscal prudence.`
     }
   });
+});
+
+
+// ---------------------------------------------------------------------------
+// Official data sources + provenance
+// Only sources with a public API are fetched live. Indian portals (GeM, CPPP)
+// have no open API and use CAPTCHA, so they are link-outs, not scraped.
+// ---------------------------------------------------------------------------
+const SOURCE_REGISTRY = [
+  { id: 'ted', name: 'TED - Tenders Electronic Daily (EU)', url: 'https://ted.europa.eu', access: 'live-api', note: 'Public Search API v3, no key required.' },
+  { id: 'cppp', name: 'Central Public Procurement Portal (India)', url: 'https://eprocure.gov.in/eprocure/app', access: 'link-only', note: 'Official Govt. of India tender portal. No public API; open the portal to verify and download NIT documents.' },
+  { id: 'gem', name: 'GeM - Government e-Marketplace (India)', url: 'https://gem.gov.in', access: 'link-only', note: 'Bids and reverse auctions require portal login.' },
+  { id: 'sam', name: 'SAM.gov (USA)', url: 'https://sam.gov', access: 'link-only', note: 'Opportunities API needs a free API key; not configured.' },
+];
+
+type TedTender = Record<string, any>;
+let tedCache: { at: number; tenders: TedTender[]; error?: string } = { at: 0, tenders: [] };
+
+const pickLang = (v: any): string => {
+  if (!v) return '';
+  if (typeof v === 'string') return v;
+  if (Array.isArray(v)) return pickLang(v[0]);
+  const val = v.eng ?? v.ENG ?? v.en ?? Object.values(v)[0];
+  return pickLang(val);
+};
+
+async function fetchTedTenders(): Promise<TedTender[]> {
+  if (Date.now() - tedCache.at < 15 * 60_000 && (tedCache.tenders.length || tedCache.error)) {
+    return tedCache.tenders;
+  }
+  try {
+    const since = new Date(Date.now() - 14 * 86400_000).toISOString().slice(0, 10).replace(/-/g, '');
+    const res = await fetch('https://api.ted.europa.eu/v3/notices/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        query: `publication-date>=${since}`,
+        fields: [
+          'publication-number', 'notice-title', 'buyer-name', 'publication-date',
+          'deadline-receipt-tender-date-lot', 'estimated-value-lot',
+          'place-of-performance-country-lot', 'classification-cpv', 'links',
+        ],
+        page: 1,
+        limit: 12,
+      }),
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!res.ok) throw new Error(`TED responded ${res.status}`);
+    const body: any = await res.json();
+    const tenders = (body.notices || []).map((n: any): TedTender => {
+      const pubNo = String(n['publication-number'] || '');
+      const htmlLinks = n.links?.html || {};
+      const url = htmlLinks.ENG || htmlLinks.eng || (Object.values(htmlLinks)[0] as string) ||
+        `https://ted.europa.eu/en/notice/-/detail/${pubNo}`;
+      const deadline = pickLang(n['deadline-receipt-tender-date-lot']);
+      const value = Array.isArray(n['estimated-value-lot']) ? Number(n['estimated-value-lot'][0]) || 0 : 0;
+      return {
+        id: `TED-${pubNo}`,
+        refNumber: pubNo,
+        title: pickLang(n['notice-title']) || `TED notice ${pubNo}`,
+        authority: pickLang(n['buyer-name']) || 'Not stated',
+        portal: 'TED (ted.europa.eu)',
+        sector: 'IT & Cloud',
+        budget: value,
+        currency: 'EUR',
+        publishDate: String(pickLang(n['publication-date'])).slice(0, 10),
+        submissionDeadline: deadline || '',
+        location: pickLang(n['place-of-performance-country-lot']) || 'EU',
+        state: '',
+        country: pickLang(n['place-of-performance-country-lot']) || 'EU',
+        emdAmount: 0,
+        performanceGuarantee: 'See notice',
+        completionDurationDays: 0,
+        description: `Official notice ${pubNo} published on TED. Open the source link for the full notice.`,
+        scopeOfWork: 'See official notice.',
+        eligibilityCriteria: { minAnnualTurnover: 0, minExperienceYears: 0, similarProjectsCount: 0, requiredCertifications: [], minSolvencyCertificate: 0 },
+        status: 'Discovered',
+        companyFitScore: 0,
+        feasibilityVerdict: 'Conditional Bid',
+        competitorBidsCount: 0,
+        lastScraped: new Date().toISOString(),
+        addendums: [],
+        documents: [],
+        defaultBiddingTemplate: 'civil_building',
+        dataSource: 'live-ted',
+        sourceUrl: url,
+      };
+    });
+    tedCache = { at: Date.now(), tenders };
+    return tenders;
+  } catch (err: any) {
+    console.warn('TED fetch failed:', err?.message);
+    tedCache = { at: Date.now(), tenders: [], error: String(err?.message || err) };
+    return [];
+  }
+}
+
+app.get('/api/sources', (_req, res) => {
+  res.json({
+    status: 'success',
+    sources: SOURCE_REGISTRY.map((s) =>
+      s.id === 'ted'
+        ? { ...s, lastSync: tedCache.at ? new Date(tedCache.at).toISOString() : null, lastError: tedCache.error || null, liveCount: tedCache.tenders.length }
+        : s
+    ),
+    sampleDataNotice:
+      'Tenders marked "Sample" are illustrative demo data, not real notices. Always verify on the official portal before bidding.',
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AI assistant chat (authenticated, rate limited)
+// ---------------------------------------------------------------------------
+app.post('/api/gemini/chat', requireAuth, aiRateLimit, async (req, res) => {
+  const { messages, tenderId, language } = req.body || {};
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ status: 'error', message: 'messages[] is required' });
+  }
+  if (!aiClient) {
+    return res.status(503).json({
+      status: 'error',
+      message: 'AI assistant is not configured on the server. Set GEMINI_API_KEY and restart.',
+    });
+  }
+
+  const history = messages.slice(-20).map((m: any) => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: String(m.text || '').slice(0, 4000) }],
+  }));
+  if (history[history.length - 1].role !== 'user') {
+    return res.status(400).json({ status: 'error', message: 'Last message must be from the user' });
+  }
+
+  const tender = tenderId ? activeTenders.find((t: any) => t.id === tenderId) : null;
+  const tenderContext = tender
+    ? `\n\nThe user is looking at this tender:\n- Title: ${tender.title}\n- Authority: ${tender.authority}\n- Portal: ${tender.portal}\n- Ref: ${tender.refNumber}\n- Budget: ${tender.budget} ${tender.currency}\n- Deadline: ${tender.submissionDeadline}\n- Data source: ${(tender as any).dataSource || 'sample'}`
+    : '';
+
+  const system =
+    'You are TenDo Assistant, an expert on public procurement and tendering (India: GFR 2017, CVC guidelines, GeM, CPPP, CPWD; also EU TED). ' +
+    'Explain tender terms, eligibility, EMD, BOQ and bid strategy in plain language. ' +
+    'Never invent tender numbers, deadlines, amounts or legal citations. If you are unsure, say so and tell the user to verify on the official portal. ' +
+    'Items labelled sample are demo data, not real notices. Keep answers concise and practical.' +
+    (language ? ` Reply in the language with code "${String(language).slice(0, 8)}".` : '') +
+    tenderContext;
+
+  try {
+    const response = await aiClient.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: history,
+      config: { systemInstruction: system, temperature: 0.4, maxOutputTokens: 1024 },
+    });
+    res.json({ status: 'success', reply: response.text || '', model: GEMINI_MODEL });
+  } catch (err: any) {
+    console.warn('Gemini chat failed:', err?.message);
+    res.status(502).json({ status: 'error', message: 'The AI service is unavailable right now. Try again shortly.' });
+  }
 });
 
 // Full-stack Vite development integration

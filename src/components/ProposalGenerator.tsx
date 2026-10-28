@@ -1,3 +1,4 @@
+import { apiJson } from '../services/api';
 import React, { useState, useEffect } from 'react';
 import { BidCalculation, BOQItem, CompanyProfile, CurrencyType, ProposalDocument, SupportedLanguage, Tender } from '../types';
 import { formatCurrency } from '../utils/formatters';
@@ -43,6 +44,7 @@ export const ProposalGenerator: React.FC<ProposalGeneratorProps> = ({
   const [proposalLanguage, setProposalLanguage] = useState<SupportedLanguage>(language);
   const [proposal, setProposal] = useState<ProposalDocument | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
@@ -54,10 +56,10 @@ export const ProposalGenerator: React.FC<ProposalGeneratorProps> = ({
 
   const handleGenerateProposal = async (langToUse = proposalLanguage) => {
     setIsGenerating(true);
+    setGenError(null);
     try {
-      const res = await fetch('/api/gemini/generate-proposal', {
+      const data = await apiJson('/api/gemini/generate-proposal', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tender,
           costing: calculation,
@@ -65,12 +67,11 @@ export const ProposalGenerator: React.FC<ProposalGeneratorProps> = ({
           language: langToUse,
         }),
       });
-      const data = await res.json();
       if (data.status === 'success' && data.data) {
         setProposal(data.data);
       }
     } catch (err) {
-      console.error('Failed to generate proposal:', err);
+      setGenError(err instanceof Error ? err.message : 'Proposal generation failed.');
     } finally {
       setIsGenerating(false);
     }
@@ -291,6 +292,10 @@ ${proposal.competitiveEdgeStatement}
             </div>
           </div>
         </div>
+
+        {genError && (
+          <div role="alert" className="mb-3 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold">{genError}</div>
+        )}
 
         {/* Loading Spinner during Gemini generation */}
         {isGenerating ? (
