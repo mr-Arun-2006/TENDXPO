@@ -15,6 +15,9 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const server = http.createServer(app);
+
+// Exported so Vercel can run the same Express app as a serverless function (api/index.ts).
+export default app;
 const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '1mb' }));
@@ -27,11 +30,18 @@ const FIREBASE_PROJECT_ID =
   process.env.FIREBASE_PROJECT_ID ||
   (() => {
     try {
-      return JSON.parse(
-        fs.readFileSync(path.resolve(__dirname, 'firebase-applet-config.json'), 'utf8')
-      ).projectId as string;
+      for (const dir of [__dirname, process.cwd()]) {
+        try {
+          return JSON.parse(
+            fs.readFileSync(path.resolve(dir, 'firebase-applet-config.json'), 'utf8')
+          ).projectId as string;
+        } catch {
+          /* try next location */
+        }
+      }
+      return 'tenderxpo';
     } catch {
-      return '';
+      return 'tenderxpo';
     }
   })();
 
@@ -1846,6 +1856,7 @@ async function startServer() {
   });
 }
 
-startServer().catch(err => {
+// On Vercel the platform runs the app per request; do not open a port.
+if (!process.env.VERCEL) startServer().catch(err => {
   console.error('Failed to start server:', err);
 });
