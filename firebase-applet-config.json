@@ -1,12 +1,10 @@
 {
-  "projectId": "gen-lang-client-0352189700",
-  "appId": "1:408043110565:web:71ce4fd14cd3ab57c04d4c",
-  "apiKey": "AIzaSyCt_ZA9b8xheWH-YHdVsDoYlVXBvYUyNwk",
-  "authDomain": "gen-lang-client-0352189700.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-tenderpulserealt-d32b78ad-052b-4c6a-bd40-a884624545e7",
-  "storageBucket": "gen-lang-client-0352189700.firebasestorage.app",
-  "messagingSenderId": "408043110565",
-  "measurementId": "",
-  "oAuthClientId": "408043110565-jtncvg05uor7asnrclp0c30ojm4b4kui.apps.googleusercontent.com",
-  "recaptchaSiteKey": ""
+  "projectId": "tenderxpo",
+  "appId": "1:581740733188:web:50cbf13befee08610fa651",
+  "apiKey": "AIzaSyDv4QwIqHUZOD9rkjjsxbo-s8vKeYS542c",
+  "authDomain": "tenderxpo.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "tenderxpo.firebasestorage.app",
+  "messagingSenderId": "581740733188",
+  "measurementId": "G-39XFPKHHEF"
 }

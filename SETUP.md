@@ -8,16 +8,16 @@ bun run dev            # http://localhost:3000
 ```
 
 ## 2. Firebase console (fixes sign-in and database errors)
-Project: `gen-lang-client-0352189700`
+Project: `tenderxpo`
 
 1. **Authentication > Sign-in method**: enable **Email/Password** and **Google**.
 2. **Authentication > Settings > Authorized domains**: add every host you serve from (for example `localhost`, your Cloud Run domain, your custom domain). Missing domains cause `auth/unauthorized-domain`.
-3. **Firestore Database**: the app uses the named database `ai-studio-tenderpulserealt-d32b78ad-052b-4c6a-bd40-a884624545e7`. Create a database with exactly that ID, or change `firestoreDatabaseId` in `firebase-applet-config.json` (use `(default)` for the default database).
+3. **Firestore Database**: create the **(default)** database (Build > Firestore Database > Create database).
 4. Deploy the rules (they are default-deny and per-user):
    ```
-   npx firebase-tools deploy --only firestore --project gen-lang-client-0352189700
+   npx firebase-tools deploy --only firestore --project tenderxpo
    ```
-   `firebase.json` already points at the right database and `firestore.rules`.
+   `firebase.json` already points at `firestore.rules` for the default database.
 
 ## 3. Data sources
 | Source | Access |

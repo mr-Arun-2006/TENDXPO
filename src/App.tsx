@@ -5,6 +5,7 @@ import { AppShell } from './components/AppShell';
 import { PublicNav } from './components/PublicNav';
 import { LandingPage } from './components/LandingPage';
 import { AuthPage, AuthMode } from './components/AuthPage';
+import { Dashboard } from './components/Dashboard';
 import { AssistantChat } from './components/AssistantChat';
 import { OfficialSources } from './components/OfficialSources';
 import { UserAccount } from './components/UserAccount';
@@ -23,7 +24,7 @@ import { User } from 'firebase/auth';
 import { initAuth, logout } from './services/firebase';
 import { apiFetch } from './services/api';
 
-const APP_TABS = ['tenders','assistant','pipeline','feasibility','costing','proposal','commodities','sources','account'];
+const APP_TABS = ['dashboard','tenders','assistant','pipeline','feasibility','costing','proposal','commodities','sources','account'];
 
 /** Hash routes: '' (landing), 'login', 'register', or 'app/<tab>'. */
 function parseHash(): string {
@@ -197,9 +198,9 @@ export default function App() {
     if (isApp && !currentUser) {
       navigateTo('login');
     } else if (currentUser && (route === '' || isPublicAuth)) {
-      navigateTo('app/tenders');
+      navigateTo('app/dashboard');
     } else if (isApp && !APP_TABS.includes(route.slice(4))) {
-      navigateTo('app/tenders');
+      navigateTo('app/dashboard');
     }
   }, [authReady, currentUser, route]);
 
@@ -299,9 +300,9 @@ export default function App() {
 
   const emptyState = (
     <div className="p-8 rounded-3xl bg-white border border-stone-200 text-center">
-      <p className="text-sm text-stone-600">Select a tender first to use this tool.</p>
+      <p className="text-sm text-stone-600">Pick a tender first, then come back here.</p>
       <button onClick={() => setActiveTab('tenders')} className="mt-4 h-10 px-5 rounded-xl bg-[#4d6b2f] text-white text-sm font-bold">
-        Browse tenders
+        Find tenders
       </button>
     </div>
   );
@@ -326,7 +327,7 @@ export default function App() {
             onBack={() => navigateTo('')}
             onSuccess={(user) => {
               setCurrentUser(user);
-              navigateTo('app/tenders');
+              navigateTo('app/dashboard');
             }}
           />
           <OfflineIndicator />
@@ -392,6 +393,19 @@ export default function App() {
             }}
             tenders={tenders}
             showToast={showToast}
+          />
+        )}
+
+        {activeTab === 'dashboard' && (
+          <Dashboard
+            user={currentUser}
+            tenders={tenders}
+            unreadCount={notifications.filter((n) => !n.read).length}
+            onNavigate={setActiveTab}
+            onOpenTender={(t) => {
+              setSelectedTender(t);
+              setActiveTab('feasibility');
+            }}
           />
         )}
 
