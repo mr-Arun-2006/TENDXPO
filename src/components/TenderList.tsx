@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CurrencyType, SectorType, Tender } from '../types';
-import { formatCurrency, formatTenderValue, getTimeRemaining, getSectorBadgeColor, getFitScoreColor } from '../utils/formatters';
+import { formatTenderValue, getTimeRemaining, getSectorBadgeColor, getFitScoreColor } from '../utils/formatters';
 import { useTranslation } from '../context/LanguageContext';
 import {
   Search,
@@ -330,7 +330,7 @@ export const TenderList: React.FC<TenderListProps> = ({
               {/* Action Buttons Row */}
               <div className="mt-5 pt-4 border-t border-stone-100 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-1 text-[11px] text-stone-500 font-mono font-medium">
-                  <span>EMD: {formatCurrency(tender.emdAmount, currency)}</span>
+                  <span>EMD: {formatTenderValue(tender.emdAmount, tender.currency)}</span>
                 </div>
 
                 <div className="flex items-center gap-2">
