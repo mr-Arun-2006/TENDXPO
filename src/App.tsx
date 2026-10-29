@@ -250,6 +250,7 @@ export default function App() {
   const handleAddNewTender = (newTenderData: Partial<Tender>) => {
     const fullTender = newTenderData as Tender;
     setTenders((prev) => [fullTender, ...prev]);
+    if (selectedTender?.id !== fullTender.id) setActiveCalculation(null);
     setSelectedTender(fullTender);
     showToast(`Added tender "${fullTender.title.slice(0, 30)}..." to pipeline.`);
   };
@@ -408,6 +409,7 @@ export default function App() {
             onSelectTender={(tenderId) => {
               const t = tenders.find((item) => item.id === tenderId);
               if (t) {
+                if (selectedTender?.id !== t.id) setActiveCalculation(null);
                 setSelectedTender(t);
                 setActiveTab('costing');
               } else {
