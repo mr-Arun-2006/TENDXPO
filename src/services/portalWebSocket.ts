@@ -31,6 +31,18 @@ class PortalWebSocketService {
   private processedEventIds = new Set<string>();
 
   public connect(): void {
+    // There is no production portal WebSocket endpoint configured by default.
+    // Enable this only when deploying the dedicated WebSocket service.
+    if (import.meta.env.VITE_PORTAL_WEBSOCKET_ENABLED !== 'true') {
+      this.updateState({
+        connected: false,
+        status: 'disconnected',
+        activePortals: [],
+        connectedClientsCount: 0,
+      });
+      return;
+    }
+
     if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
       return;
     }
