@@ -1,4 +1,5 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
+import { getAnalytics, isSupported as analyticsSupported } from 'firebase/analytics';
 import {
   getAuth,
   GoogleAuthProvider,
@@ -56,6 +57,13 @@ function createFirestore() {
 }
 
 export const db = createFirestore();
+
+// Analytics is optional: it needs a browser, a measurementId and cookies/IndexedDB.
+if (typeof window !== 'undefined' && (firebaseConfig as { measurementId?: string }).measurementId) {
+  analyticsSupported()
+    .then((ok) => { if (ok) getAnalytics(app); })
+    .catch(() => { /* analytics unavailable: ignore */ });
+}
 export const auth = getAuth(app);
 
 // ---------------------------------------------------------------------------

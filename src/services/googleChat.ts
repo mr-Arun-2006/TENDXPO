@@ -28,7 +28,7 @@ export interface ChatApiError {
   configUrl: string;
 }
 
-const PROJECT_ID = (firebaseConfig as any).projectId || 'gen-lang-client-0352189700';
+const PROJECT_ID = (firebaseConfig as any).projectId || 'tenderxpo';
 export const CHAT_CONSOLE_CONFIG_URL = `https://console.cloud.google.com/apis/api/chat.googleapis.com/hangouts-chat?project=${PROJECT_ID}`;
 
 /**
