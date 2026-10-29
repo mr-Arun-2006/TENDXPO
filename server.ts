@@ -878,55 +878,163 @@ Provide a comprehensive, highly structured feasibility audit in JSON format with
     }
   }
 
-  // Deterministic Algorithmic Fallback Engine (Ensures 100% reliability and financial precision)
-  const turnoverRatio = p.annualTurnover / (tender.eligibilityCriteria?.minAnnualTurnover || tender.budget * 0.8);
-  const capacityFree = 100 - (p.currentCapacityUtilizationPercent || 60);
-  
-  let score = 50;
-  if (turnoverRatio >= 1.5) score += 20;
-  else if (turnoverRatio >= 1.0) score += 10;
-  else score -= 15;
+  // Rules-based preliminary check. Missing evidence is not treated as a pass or a win probability.
+  const requiredTurnover = Number(tender.eligibilityCriteria?.minAnnualTurnover || 0);
+  const annualTurnover = Number(p.annualTurnover || 0);
+  const turnoverKnown = requiredTurnover > 0 && annualTurnover > 0;
+  const turnoverPassed = turnoverKnown && annualTurnover >= requiredTurnover;
 
-  if (capacityFree >= 35) score += 15;
-  else if (capacityFree >= 20) score += 8;
-  else score -= 10;
+  const utilization = Number(p.currentCapacityUtilizationPercent);
+  const capacityKnown = Number(p.maxProjectCapacity) > 0 &&
+    Number.isFinite(utilization) && utilization >= 0 && utilization <= 100;
+  const capacityFree = capacityKnown ? 100 - utilization : null;
 
-  if (p.pastPerformanceRating >= 4.5) score += 15;
-  else score += 5;
+  const rating = Number(p.pastPerformanceRating);
+  const ratingKnown = Number.isFinite(rating) && rating > 0 && rating <= 5;
 
-  score = Math.min(98, Math.max(35, Math.round(score)));
-  const verdict = score >= 80 ? 'High Viability' : score >= 65 ? 'Conditional Bid' : 'High Risk / No-Bid';
+  const requiredCerts: string[] = Array.isArray(tender.eligibilityCriteria?.requiredCertifications)
+    ? tender.eligibilityCriteria.requiredCertifications.map((value: unknown) => String(value))
+    : [];
+  const companyCerts: string[] = Array.isArray(p.certifications)
+    ? p.certifications.map((value: unknown) => String(value))
+    : [];
+  const missingCerts = requiredCerts.filter((required) =>
+    !companyCerts.some((held) =>
+      held.trim().length > 0 &&
+      (held.toLowerCase().includes(required.toLowerCase()) ||
+       required.toLowerCase().includes(held.toLowerCase()))
+    )
+  );
+
+  const emd = Number(tender.emdAmount || 0);
+  const solvency = Number(p.availableSolvency || 0);
+  const solvencyKnown = emd > 0 && solvency > 0 &&
+    String(p.currency || '') === String(tender.currency || '');
+  const solvencyPassed = solvencyKnown && solvency >= emd;
+
+  const checks: Array<{ weight: number; known: boolean; passed: boolean }> = [
+    { weight: 40, known: turnoverKnown, passed: turnoverPassed },
+    { weight: 20, known: capacityKnown, passed: Boolean(capacityKnown && capacityFree !== null && capacityFree >= 20) },
+    { weight: 15, known: ratingKnown, passed: ratingKnown && rating >= 4 },
+    { weight: 15, known: requiredCerts.length > 0, passed: requiredCerts.length > 0 && missingCerts.length === 0 },
+    { weight: 10, known: solvencyKnown, passed: solvencyPassed },
+  ];
+  const knownChecks = checks.filter((check) => check.known);
+  const knownWeight = knownChecks.reduce((sum, check) => sum + check.weight, 0);
+  const passedWeight = knownChecks.filter((check) => check.passed).reduce((sum, check) => sum + check.weight, 0);
+  const score = knownWeight ? Math.round((passedWeight / knownWeight) * 100) : 0;
+
+  const missingEvidence: string[] = [];
+  if (!turnoverKnown) missingEvidence.push('Tender minimum turnover or company-reported turnover is missing.');
+  if (!capacityKnown) missingEvidence.push('Operational capacity is not sufficiently recorded in the company profile.');
+  if (!ratingKnown) missingEvidence.push('Past-performance rating is not recorded in the company profile.');
+  if (requiredCerts.length && missingCerts.length) missingEvidence.push('Required certificates not evidenced in the company profile: ' + missingCerts.join(', ') + '.');
+  const requiredExperience = Number(tender.eligibilityCriteria?.minExperienceYears || 0);
+  if (requiredExperience > 0) missingEvidence.push('Verify the required ' + requiredExperience + ' years of experience against company records and original tender documents.');
+  const similarProjects = Number(tender.eligibilityCriteria?.similarProjectsCount || 0);
+  if (similarProjects > 0) missingEvidence.push('Verify the required ' + similarProjects + ' similar completed projects; they are not stored in the current company profile.');
+  if (emd <= 0) missingEvidence.push('EMD is not stated in the normalized record; verify the original notice.');
+  else if (!solvencyKnown) missingEvidence.push('EMD and available solvency cannot be compared reliably because company data or currency information is missing.');
+  if (!(Number(tender.budget) > 0)) missingEvidence.push('Estimated tender value is not stated in the normalized record.');
+  if (!tender.submissionDeadline) missingEvidence.push('Submission deadline is missing; verify it on the official source.');
+  if (!tender.sourceUrl) missingEvidence.push('A direct source URL is not attached to this tender record.');
+  if (tender.dataSource === 'sample') missingEvidence.push('This is sample data, not a real bidding opportunity.');
+
+  const hardFailure = (turnoverKnown && !turnoverPassed) ||
+    (requiredCerts.length > 0 && missingCerts.length > 0) ||
+    (solvencyKnown && !solvencyPassed) ||
+    tender.dataSource === 'sample';
+  const verdict = hardFailure
+    ? 'High Risk / No-Bid'
+    : missingEvidence.length
+    ? 'Conditional Bid'
+    : score >= 80
+    ? 'High Viability'
+    : score >= 60
+    ? 'Conditional Bid'
+    : 'High Risk / No-Bid';
+
+  const strengths: string[] = [];
+  if (turnoverPassed) strengths.push('Company-reported turnover meets the stated threshold; supporting financial evidence has not been independently verified.');
+  if (capacityKnown && capacityFree !== null && capacityFree >= 20) strengths.push('The company profile reports ' + capacityFree + '% available capacity.');
+  if (ratingKnown && rating >= 4) strengths.push('The company reports a past-performance rating of ' + rating + '/5; references still need verification.');
+  if (requiredCerts.length && missingCerts.length === 0) strengths.push('The company profile lists the certificates required by the normalized record; validity and authenticity must be checked.');
+  if (!strengths.length) strengths.push('No substantive strength can be confirmed from the available structured inputs.');
+
+  const riskFactors: string[] = [];
+  if (turnoverKnown && !turnoverPassed) riskFactors.push('Company-reported turnover is below the stated tender threshold.');
+  if (missingCerts.length) riskFactors.push('Required certificate evidence is missing or does not match: ' + missingCerts.join(', ') + '.');
+  if (!capacityKnown) riskFactors.push('Operational capacity is incomplete, so mobilization readiness cannot be established.');
+  if (requiredExperience > 0 || similarProjects > 0) riskFactors.push('Experience and similar-project eligibility need evidence from company records.');
+  if (!tender.submissionDeadline) riskFactors.push('Submission deadline is unknown in the normalized record.');
+  if (!(Number(tender.budget) > 0)) riskFactors.push('Tender value is missing from the normalized record.');
+  if (tender.dataSource === 'sample') riskFactors.push('This notice is sample data; do not use it for a real bid/no-bid decision.');
+  riskFactors.push('BOQ material rates must be verified against current local supplier quotations before a real bid.');
+
+  const checklist: Array<{ criteria: string; required: string; companyValue: string; passed: boolean }> = [
+    {
+      criteria: 'Minimum Annual Turnover',
+      required: turnoverKnown ? 'At least ' + requiredTurnover.toLocaleString() + ' ' + (tender.currency || p.currency || '') : 'Threshold or company value missing',
+      companyValue: annualTurnover > 0 ? annualTurnover.toLocaleString() + ' ' + (p.currency || '') + ' (company-reported)' : 'Not recorded',
+      passed: turnoverPassed,
+    },
+    {
+      criteria: 'Operational Capacity',
+      required: 'Sufficient capacity for the tender schedule',
+      companyValue: capacityKnown ? utilization + '% utilized' : 'Not recorded in company profile',
+      passed: Boolean(capacityKnown && capacityFree !== null && capacityFree >= 20),
+    },
+    {
+      criteria: 'Past Performance',
+      required: 'Review the tender’s actual performance requirements',
+      companyValue: ratingKnown ? rating + '/5 (company-reported)' : 'Not recorded in company profile',
+      passed: Boolean(ratingKnown && rating >= 4),
+    },
+  ];
+  if (requiredCerts.length) checklist.push({
+    criteria: 'Required Certifications',
+    required: requiredCerts.join(', '),
+    companyValue: missingCerts.length ? 'Missing or unverified: ' + missingCerts.join(', ') : companyCerts.join(', '),
+    passed: missingCerts.length === 0,
+  });
+  if (requiredExperience > 0) checklist.push({
+    criteria: 'Minimum Experience',
+    required: requiredExperience + ' years',
+    companyValue: 'Not recorded in current company profile',
+    passed: false,
+  });
+  if (similarProjects > 0) checklist.push({
+    criteria: 'Similar Projects Completed',
+    required: similarProjects + ' projects',
+    companyValue: 'Not recorded in current company profile',
+    passed: false,
+  });
+  if (emd > 0) checklist.push({
+    criteria: 'EMD / Solvency',
+    required: emd.toLocaleString() + ' ' + (tender.currency || ''),
+    companyValue: solvencyKnown ? solvency.toLocaleString() + ' ' + p.currency + ' (company-reported)' : 'Currency or solvency data incomplete',
+    passed: solvencyPassed,
+  });
 
   res.json({
     status: 'success',
-    source: 'deterministic_engine',
+    source: 'heuristic',
     data: {
       fitScore: score,
       verdict,
-      executiveSummary: `Our financial turnover (${(p.annualTurnover / 1000000).toFixed(1)}M) comfortably satisfies the minimum pre-qualification benchmark (${(tender.eligibilityCriteria?.minAnnualTurnover / 1000000).toFixed(1)}M). Operational bandwidth has ${capacityFree}% available capacity to mobilize specialized engineers and labor without impacting ongoing projects.`,
-      strengths: [
-        `Financial Solvency Headroom: Available bank guarantee limit exceeds EMD (${tender.emdAmount}) by 3.4x.`,
-        `Past Performance Index: ${p.pastPerformanceRating}/5 rating across government civil works with zero liquidated damages.`,
-        `Technical Compliance: Required ISO & statutory safety certifications are fully active.`,
-        `Material Supply Ties: Existing long-term price contracts for Fe550 TMT Steel and OPC Cement insulate against market spikes.`
-      ],
-      riskFactors: [
-        `Delivery Schedule Intensity: ${tender.completionDurationDays} days requires dual-shift site operations.`,
-        `Steel & Fuel Price Volatility: Raw material fluctuations require a structured 3.5% price escalation buffer.`,
-        `Subcontractor Coordination: Special MEP / HVAC packages need pre-vetted OEM tie-ups before technical bid submission.`
-      ],
+      executiveSummary: 'Preliminary rules-based fit score calculated from ' + knownChecks.length +
+        ' available checks. Missing evidence is listed below. This is not a legal eligibility determination or a probability of winning.' +
+        (tender.dataSource === 'sample' ? ' The selected record is sample data and must not be used to bid.' : ''),
+      strengths,
+      riskFactors,
+      missingEvidence,
       strategicWinRecommendations: [
-        `Position bid within 9.5% to 11.8% below the NIT Estimated Budget to maximize L1 winning probability while safeguarding a healthy 12% operational profit.`,
-        `Attach verifiable client completion certificates for multi-storey RCC framed structures to ensure 100% technical qualification.`,
-        `Submit detailed itemized BOQ with automated price variation formulas to protect against commodity rate surges.`
+        'Review the original tender notice, all corrigenda, technical specifications, deadlines and eligibility clauses.',
+        'Provide evidence for turnover, experience, similar projects, certificates, solvency and execution capacity before treating a requirement as satisfied.',
+        'Do not apply a universal discount. Price the verified quantities using current supplier quotations, taxes, logistics, project risk and a viable margin.',
+        'Follow the evaluation methodology specified in the tender (such as L1 or QCBS); do not infer win probability without reliable competitor and award data.',
       ],
-      bidNoBidChecklist: [
-        { criteria: 'Minimum Annual Turnover', required: `>= ${tender.eligibilityCriteria?.minAnnualTurnover || '$3,000,000'}`, companyValue: `$${p.annualTurnover.toLocaleString()}`, passed: turnoverRatio >= 1.0 },
-        { criteria: 'Similar Technical Works Completed', required: `>= ${tender.eligibilityCriteria?.similarProjectsCount || 2} projects`, companyValue: '4 completed projects', passed: true },
-        { criteria: 'Operational Bandwidth & Capacity', required: '< 80% current utilization', companyValue: `${p.currentCapacityUtilizationPercent}% utilized`, passed: capacityFree >= 20 },
-        { criteria: 'Statutory Safety & Quality Certifications', required: 'ISO 9001, Safety, Class-1', companyValue: 'All 6 certificates active', passed: true },
-        { criteria: 'Bank Guarantee / EMD Liquid Solvency', required: `>= $${tender.emdAmount?.toLocaleString() || '50,000'}`, companyValue: `$${p.availableSolvency.toLocaleString()}`, passed: true },
-      ],
+      bidNoBidChecklist: checklist,
     },
   });
 });
