@@ -527,21 +527,7 @@ interface UserSectorProfileData {
   updatedAt: string;
 }
 
-let sectorProfilesMap: Record<string, UserSectorProfileData> = {
-  default_user: {
-    userId: 'default_user',
-    targetSectors: ['Civil Construction', 'Roads & Highways', 'Renewable Energy'],
-    minBudget: 10000000, // ₹1 Cr
-    maxBudget: 2500000000, // ₹250 Cr
-    preferredStates: ['All India', 'National Capital Region', 'Western Corridor'],
-    emailAlertsEnabled: true,
-    alertEmail: 'demo@example.invalid',
-    inAppAlertsEnabled: true,
-    googleChatAlertsEnabled: true,
-    minFitScoreThreshold: 70,
-    updatedAt: new Date().toISOString(),
-  },
-};
+let sectorProfilesMap: Record<string, UserSectorProfileData> = {};
 
 // Store for triggered tender alerts
 interface TenderAlertLog {
@@ -569,32 +555,7 @@ interface TenderAlertLog {
   createdAt: string;
 }
 
-let triggeredAlerts: TenderAlertLog[] = [
-  {
-    id: 'alt-init-1',
-    alertId: 'alt-init-1',
-    userId: 'default_user',
-    tenderId: 'TND-2026-BLD-089',
-    tenderTitle: 'Construction of Multi-Storey Composite Administrative Headquarters (G+8 Floors)',
-    portal: 'CPPP (eprocure.gov.in)',
-    sector: 'Civil Construction',
-    budget: 4850000,
-    currency: 'INR',
-    fitScore: 88,
-    matchReason: 'Direct Sector Match: Civil Construction • Fit Score 88% exceeds 70% benchmark • Budget within operational capacity',
-    deliveryChannels: ['email', 'in_app', 'google_chat'],
-    emailStatus: 'Dispatched to demo@example.invalid',
-    emailPreview: {
-      to: 'demo@example.invalid',
-      subject: '🚨 [TenDo Alert] CPWD Multi-Storey Administrative Headquarters (NIT-892) - 88% Fit Score',
-      previewText: 'A high-viability Civil Construction tender has been scraped on CPPP. Budget: ₹40.2 Cr. Submission deadline in 4 days.',
-      htmlBody: 'Official tender matching your target criteria. Direct BOQ & Cost estimation ready in TenDo workspace.',
-      sentAt: new Date(Date.now() - 3600000 * 3).toISOString(),
-    },
-    read: false,
-    createdAt: new Date(Date.now() - 3600000 * 3).toISOString(),
-  },
-];
+let triggeredAlerts: TenderAlertLog[] = [];
 
 // ==========================================
 // REAL-TIME WEBSOCKET PORTALS MONITORING SYSTEM
@@ -654,7 +615,8 @@ wss.on('connection', (ws: WebSocket) => {
         connectedClientsCount: wsClients.size,
         recentEvents: [],
         currentCommodities: COMMODITY_INDEX,
-        activeTendersCount: activeTenders.length,
+        activeTendersCount: 0,
+        sampleTenderCount: activeTenders.length,
         protocol: 'TenDo Real-Time Official Portals Stream v2.1',
       },
     })
@@ -699,87 +661,7 @@ wss.on('connection', (ws: WebSocket) => {
 
 // No periodic synthetic events. Real notifications must be derived from source changes.
 
-// Core Cloud Function: Match Tender against Sector Profiles and Dispatch Alerts
-function executeCloudFunctionTenderMatch(newTender: any, targetUserId?: string) {
-  const matches: Array<{ profile: UserSectorProfileData; alert: TenderAlertLog }> = [];
-  const profilesToEvaluate = targetUserId && sectorProfilesMap[targetUserId]
-    ? [sectorProfilesMap[targetUserId]]
-    : Object.values(sectorProfilesMap);
-
-  for (const profile of profilesToEvaluate) {
-    const sectorMatched = profile.targetSectors.some(
-      (s) => s.toLowerCase() === (newTender.sector || '').toLowerCase()
-    );
-    const fitScore = newTender.companyFitScore || 82;
-    const fitPassed = fitScore >= (profile.minFitScoreThreshold || 65);
-    const inrBudget = newTender.currency === 'INR' ? newTender.budget : newTender.budget * 83;
-    const budgetPassed = inrBudget >= profile.minBudget && inrBudget <= profile.maxBudget;
-
-    if (sectorMatched && fitPassed) {
-      const alertId = `alt-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-      const deliveryChannels: string[] = [];
-      if (profile.inAppAlertsEnabled) deliveryChannels.push('in_app');
-      if (profile.emailAlertsEnabled) deliveryChannels.push('email');
-      if (profile.googleChatAlertsEnabled) deliveryChannels.push('google_chat');
-
-      const recipientEmail = profile.alertEmail || 'demo@example.invalid';
-      const formattedInr = inrBudget >= 10000000
-        ? `₹${(inrBudget / 10000000).toFixed(2)} Crore`
-        : `₹${(inrBudget / 100000).toFixed(2)} Lakh`;
-
-      const alertLog: TenderAlertLog = {
-        id: alertId,
-        alertId,
-        userId: profile.userId,
-        tenderId: newTender.id,
-        tenderTitle: newTender.title,
-        portal: newTender.portal,
-        sector: newTender.sector,
-        budget: inrBudget,
-        currency: 'INR',
-        fitScore,
-        matchReason: `Sector Match: "${newTender.sector}" • Calculated Fit: ${fitScore}% • Portal: ${newTender.portal} • Value: ${formattedInr}`,
-        deliveryChannels,
-        emailStatus: profile.emailAlertsEnabled
-          ? `Dispatched to ${recipientEmail} (Instant SMTP/Firebase Alert)`
-          : 'Email Alerts Disabled',
-        emailPreview: {
-          to: recipientEmail,
-          subject: `🚨 [TenDo Alert] ${newTender.portal}: ${newTender.title.slice(0, 50)}... (${fitScore}% Fit Score)`,
-          previewText: `New government tender detected matching your sector profile "${newTender.sector}". Budget: ${formattedInr}. Authority: ${newTender.authority}`,
-          htmlBody: `
-            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #4d6b2f; border-radius: 12px; overflow: hidden;">
-              <div style="background-color: #4d6b2f; color: #ffffff; padding: 20px; text-align: left;">
-                <h2 style="margin: 0; font-size: 18px;">TenDo Tender Intelligence System</h2>
-                <p style="margin: 4px 0 0 0; font-size: 12px; opacity: 0.9;">Real-Time Government e-Procurement Match Alert</p>
-              </div>
-              <div style="padding: 24px; background: #ffffff;">
-                <span style="background: #eef3e8; color: #3f5724; font-weight: bold; padding: 4px 10px; border-radius: 6px; font-size: 12px;">
-                  Sector Match: ${newTender.sector}
-                </span>
-                <h3 style="margin: 14px 0 8px; color: #1c1917; font-size: 16px;">${newTender.title}</h3>
-                <table style="width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 13px;">
-                  <tr><td style="color: #78716c; padding: 6px 0;">Official Portal:</td><td style="font-weight: bold;">${newTender.portal}</td></tr>
-                  <tr><td style="color: #78716c; padding: 6px 0;">Tender Inviting Authority:</td><td style="font-weight: bold;">${newTender.authority}</td></tr>
-                  <tr><td style="color: #78716c; padding: 6px 0;">Estimated NIT Budget:</td><td style="color: #3f5724; font-weight: bold;">${formattedInr}</td></tr>
-                  <tr><td style="color: #78716c; padding: 6px 0;">Company Fit Score:</td><td style="font-weight: bold; color: #4d6b2f;">${fitScore}% (High Viability)</td></tr>
-                  <tr><td style="color: #78716c; padding: 6px 0;">Submission Deadline:</td><td style="color: #dc2626; font-weight: bold;">${new Date(newTender.submissionDeadline).toLocaleDateString('en-IN')}</td></tr>
-                </table>
-              </div>
-            </div>
-          `,
-          sentAt: new Date().toISOString(),
-        },
-        read: false,
-        createdAt: new Date().toISOString(),
-      };
-
-      triggeredAlerts.unshift(alertLog);
-      matches.push({ profile, alert: alertLog });
-    }
-  }
-  return matches;
-}
+// Alert delivery remains disabled until verified source changes and durable user preferences are implemented.
 
 // This endpoint intentionally does not fabricate tender records or alert-delivery receipts.
 app.post('/api/cloud-functions/scraper-trigger', requireAuth, (_req, res) => {
@@ -793,7 +675,20 @@ app.post('/api/cloud-functions/scraper-trigger', requireAuth, (_req, res) => {
 // API: Get User Sector Profile
 app.get('/api/user-sector-profile', requireAuth, (req, res) => {
   const userId = (req as AuthedRequest).user!.uid;
-  const profile = sectorProfilesMap[userId] || sectorProfilesMap.default_user;
+  const profile = sectorProfilesMap[userId] || {
+    userId,
+    targetSectors: ['Civil Construction'],
+    minBudget: 0,
+    maxBudget: Number.MAX_SAFE_INTEGER,
+    preferredStates: ['All India'],
+    emailAlertsEnabled: false,
+    alertEmail: (req as AuthedRequest).user?.email || '',
+    inAppAlertsEnabled: true,
+    googleChatAlertsEnabled: false,
+    minFitScoreThreshold: 70,
+    updatedAt: new Date().toISOString(),
+  };
+  sectorProfilesMap[userId] = profile;
   res.json({ status: 'success', profile });
 });
 
@@ -801,15 +696,28 @@ app.get('/api/user-sector-profile', requireAuth, (req, res) => {
 app.post('/api/user-sector-profile', requireAuth, (req, res) => {
   const profileData = req.body || {};
   const userId = (req as AuthedRequest).user!.uid;
+  const existing = sectorProfilesMap[userId] || {
+    userId,
+    targetSectors: ['Civil Construction'],
+    minBudget: 0,
+    maxBudget: Number.MAX_SAFE_INTEGER,
+    preferredStates: ['All India'],
+    emailAlertsEnabled: false,
+    alertEmail: (req as AuthedRequest).user?.email || '',
+    inAppAlertsEnabled: true,
+    googleChatAlertsEnabled: false,
+    minFitScoreThreshold: 70,
+    updatedAt: new Date().toISOString(),
+  };
   sectorProfilesMap[userId] = {
-    ...sectorProfilesMap[userId],
+    ...existing,
     ...profileData,
     userId,
     updatedAt: new Date().toISOString(),
   };
   res.json({
     status: 'success',
-    message: 'User sector profile updated successfully. Scraper alert matching active.',
+    message: 'Sector preferences updated in memory for this server instance. Persistent alert delivery is not configured yet.',
     profile: sectorProfilesMap[userId],
   });
 });
@@ -854,7 +762,8 @@ app.get('/api/portals', (_req, res) => {
     sourceOfTruth: '/api/sources',
     countMeaning: 'activeTenderCount is not a live portal count; use /api/tenders and inspect each record dataSource.',
     liveSourceIds: SOURCE_REGISTRY.filter((source) => source.access === 'live-api').map((source) => source.id),
-    activeTenderCount: activeTenders.filter((t: any) => t.dataSource !== 'sample').length,
+    activeTenderCount: 0,
+    sampleTenderCount: activeTenders.length,
   });
 });
 
@@ -904,7 +813,13 @@ app.post('/api/gemini/analyze-bid', requireAuth, aiRateLimit, async (req, res) =
     return res.status(400).json({ status: 'error', message: 'Tender payload required' });
   }
 
-  const p = profile || companyProfile;
+  if (!profile || typeof profile !== 'object' || !String(profile.name || '').trim() || !(Number(profile.annualTurnover) > 0)) {
+    return res.status(400).json({
+      status: 'company_profile_required',
+      message: 'Complete your company name and annual turnover before requesting a tender analysis.',
+    });
+  }
+  const p = profile;
 
   // Check if Gemini AI client is available
   if (aiClient) {
@@ -1023,7 +938,13 @@ app.post('/api/gemini/generate-proposal', requireAuth, aiRateLimit, async (req, 
     return res.status(400).json({ status: 'error', message: 'Tender and costing calculation required' });
   }
 
-  const p = profile || companyProfile;
+  if (!profile || typeof profile !== 'object' || !String(profile.name || '').trim() || !(Number(profile.annualTurnover) > 0)) {
+    return res.status(400).json({
+      status: 'company_profile_required',
+      message: 'Complete your company name and annual turnover before requesting a tender analysis.',
+    });
+  }
+  const p = profile;
   const targetLang = language || 'en';
 
   const langNames: Record<string, string> = {
@@ -1054,7 +975,7 @@ TENDER DETAILS:
 
 FINANCIAL & COSTING BREAKDOWN:
 - Proposed Bid Amount: ${costing.totalBidAmount} ${tender.currency} (${costing.varianceAgainstTenderBudgetPercent >= 0 ? '+' : ''}${costing.varianceAgainstTenderBudgetPercent}% vs NIT estimate)
-- Direct Material & Raw Commodities: ${costing.directMaterialsCost} ${tender.currency} (Calculated with current steel, cement, sand, paint spot rates)
+- Direct Material & Raw Commodities: ${costing.directMaterialsCost} ${tender.currency} (Calculated using supplied BOQ assumptions; verify rates against current supplier quotations)
 - Direct Labor & Workforce: ${costing.directLaborCost} ${tender.currency} (${costing.workerCount || 75} workers over ${tender.completionDurationDays} days)
 - Heavy Equipment & Transport Logistics: ${costing.equipmentAndTransportCost || costing.transportLogisticsCost} ${tender.currency}
 - Site Overheads & Quality Assurance: ${costing.preliminariesOverheadCost} ${tender.currency}
@@ -1111,7 +1032,7 @@ Return a structured JSON with:
     status: 'success',
     source: 'deterministic_engine',
     data: {
-      executiveCoverLetter: `To: The Tender Inviting Authority (TIA)\n${tender.authority}\n\nSubject: Formal Technical & Financial Bid Submission for "${tender.title}" (Ref: ${tender.refNumber})\n\nDear Sir/Madam,\n\nWe, ${p.name}, have thoroughly examined the Tender Documents, General and Special Conditions of Contract, Technical Specifications, and the Bill of Quantities (BOQ). We hereby offer to execute and complete the entire works in conformity with the tender conditions for the competitive sum of ${costing.totalBidAmount?.toLocaleString()} ${tender.currency}.\n\nOur bid has been engineered through real-time market cost analysis, incorporating prevailing indexation for structural steel, high-strength cement, aggregates, and statutory fair wages. We confirm our unreserved acceptance of all contractual milestones and submit herewith our Earnest Money Deposit and all mandatory pre-qualification credentials.\n\nRespectfully submitted,\nAuthorized Signatory\n${p.name}`,
+      executiveCoverLetter: `To: The Tender Inviting Authority (TIA)\n${tender.authority}\n\nSubject: Formal Technical & Financial Bid Submission for "${tender.title}" (Ref: ${tender.refNumber})\n\nDear Sir/Madam,\n\nWe, ${p.name}, have thoroughly examined the Tender Documents, General and Special Conditions of Contract, Technical Specifications, and the Bill of Quantities (BOQ). We hereby offer to execute and complete the entire works in conformity with the tender conditions for the competitive sum of ${costing.totalBidAmount?.toLocaleString()} ${tender.currency}.\n\nOur bid has been engineered through the supplied cost assumptions, incorporating the supplied assumptions for structural steel, cement, aggregates, and labour, all of which require verification. We confirm our unreserved acceptance of all contractual milestones and submit herewith our Earnest Money Deposit and all mandatory pre-qualification credentials.\n\nRespectfully submitted,\nAuthorized Signatory\n${p.name}`,
       costJustificationNarrative: `Our financial estimate of ${costing.totalBidAmount?.toLocaleString()} ${tender.currency} represents a disciplined, data-backed quotation that delivers optimal value to the government without sacrificing structural integrity or delivery timelines:\n\n1. Raw Materials & Commodities (${costing.directMaterialsCost?.toLocaleString()} ${tender.currency}): Direct pricing based on current mill spot rates for Fe550D TMT Steel and 53-Grade OPC Cement with volume procurement agreements.\n2. Workforce & Manpower (${costing.directLaborCost?.toLocaleString()} ${tender.currency}): Engineered on an estimated ${costing.totalManDays || 22500} man-days across certified site engineers, skilled bar-benders, masons, and general helpers adhering strictly to statutory minimum wages and EPF/ESIC social security provisions.\n3. Equipment & Logistics (${(costing.equipmentAndTransportCost || costing.transportLogisticsCost || 240000)?.toLocaleString()} ${tender.currency}): Dedicated deployment of heavy machinery (Tower Cranes, JCBs, Concrete Transit Mixers) owned and operated directly by our firm, eliminating third-party rental markups.\n4. Hedging & Buffer (${costing.contingencyBufferCost?.toLocaleString()} ${tender.currency}): A prudent contingency reserve to insulate the project against unexpected commodity spikes or diesel freight hikes.`,
       executionScheduleNarrative: `The works shall be completed strictly within ${tender.completionDurationDays} calendar days structured across four synchronized operational gates:\n- Phase 1 (Days 1–45): Site handover, perimeter fencing, geotechnical validation, temporary site offices, and substructure excavation.\n- Phase 2 (Days 46–150): Foundation raft, columns, and super-structure RCC framing up to completion.\n- Phase 3 (Days 151–280): Masonry walls, internal plastering, MEP cabling, fire safety conduits, and architectural facade installations.\n- Phase 4 (Days 281–${tender.completionDurationDays}): Finishes, weathercoat exterior painting, testing & commissioning, statutory agency approvals, and final handover.`,
       qualityAndSafetyPlan: `We enforce a Zero-Accident, Zero-Defect Quality Assurance (QA/QC) charter:\n- 100% third-party batch testing for all cement and steel consignments through government-accredited NABL laboratories.\n- Daily concrete cube compressive strength tests (7-day and 28-day curing intervals).\n- Strict compliance with ISO 45001 safety mandates, personal protective equipment (PPE) enforcement, and site paramedic coverage.`,
