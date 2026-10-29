@@ -16,7 +16,7 @@ export default defineConfig(() => {
           id: '/',
           name: 'TenDo - Tender Intelligence System',
           short_name: 'TenDo',
-          description: 'Government bids monitoring, real-time portal scraping, commodity & labor cost estimation, feasibility scoring & proposal generator.',
+          description: 'Source-linked tender discovery, company matching, BOQ costing, risk analysis and deadline tracking.',
           theme_color: '#0284c7',
           background_color: '#020617',
           display: 'standalone',
