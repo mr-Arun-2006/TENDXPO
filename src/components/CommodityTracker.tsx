@@ -23,12 +23,12 @@ export const CommodityTracker: React.FC<CommodityTrackerProps> = ({
         </div>
         <div className="flex-1">
           <h3 className="font-extrabold text-amber-900 text-sm">
-            Commodity Market Volatility Advisory (Wholesale Price Index - India)
+            Indicative reference rates — not live market quotations
           </h3>
           <p className="text-xs text-amber-800 mt-1 leading-relaxed">
-            Fe550D TMT Reinforcement Steel has recorded a <strong>+4.8%</strong> 7-day price escalation
-            in domestic secondary and primary mills. Ensure all active CPWD / State PWD civil building
-            and flyover bids incorporate the mandatory <strong>3.5% price escalation buffer</strong> under CPWD Clause 10CA.
+            These figures are illustrative starting assumptions and are not connected to a verified commodity-price provider.
+            Replace them with supplier quotations or approved market-rate references before relying on a BOQ or submitting a bid.
+            No mandatory escalation percentage is implied by this demo dataset.
           </p>
         </div>
         <button
@@ -36,7 +36,7 @@ export const CommodityTracker: React.FC<CommodityTrackerProps> = ({
           className="shrink-0 px-3.5 py-2 rounded-xl bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold flex items-center gap-1.5 transition shadow-2xs"
         >
           <RefreshCw className="w-3.5 h-3.5 text-amber-700" />
-          <span>Refresh Spot Index (₹)</span>
+          <span>Reload reference rates</span>
         </button>
       </div>
 
@@ -76,7 +76,7 @@ export const CommodityTracker: React.FC<CommodityTrackerProps> = ({
                 {/* Spot Price Display in INR */}
                 <div className="flex items-baseline gap-2 mt-3 font-mono">
                   <span className="text-2xl font-black text-stone-900">
-                    {formatRawAmount(comm.currentPrice, 'INR')}
+                    {formatRawAmount(comm.currentPrice, comm.currency)}
                   </span>
                   <span className="text-xs text-stone-500 font-sans">/ {comm.unit.split(' ')[0]}</span>
                 </div>
@@ -84,7 +84,7 @@ export const CommodityTracker: React.FC<CommodityTrackerProps> = ({
                 {/* Mini SVG Sparkline Trend in Olive Green */}
                 <div className="mt-3 pt-3 border-t border-stone-100">
                   <div className="flex justify-between text-[10px] text-stone-500 mb-1 font-medium">
-                    <span>7-Day Price Trajectory</span>
+                    <span>Illustrative sample history</span>
                     <span className="font-bold text-stone-700">Volatility: {comm.volatility}</span>
                   </div>
                   <div className="h-10 w-full flex items-end gap-1">
