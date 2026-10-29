@@ -312,27 +312,8 @@ export default function App() {
     );
   };
 
-  // If activeCalculation is null, compute a default for the selected tender
-  const currentCalc =
-    activeCalculation || {
-      directMaterialsCost: 777065,
-      directLaborCost: 1238000,
-      transportLogisticsCost: 215900,
-      equipmentMachineryCost: 215900,
-      preliminariesOverheadCost: 88400,
-      contingencyBufferCost: 81400,
-      baseCost: 2400765,
-      marginPercent: 12.5,
-      marginAmount: 300095,
-      taxPercent: 18.0,
-      taxAmount: 486155,
-      totalBidAmount: 3187015,
-      varianceAgainstTenderBudgetPercent: -34.3,
-      winProbability: 82,
-      strategyType: 'Balanced (Optimal)',
-      totalManDays: 38600,
-      workerCount: 121,
-    };
+  // A proposal is available only after the user has calculated and reviewed a BOQ.
+  const currentCalc = activeCalculation;
 
   const goLogin = () => navigateTo('login');
   const goRegister = () => navigateTo('register');
@@ -498,8 +479,8 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'proposal' &&
-          (selectedTender ? (
+        {activeTab === 'proposal' && (
+          selectedTender && currentCalc ? (
             <ProposalGenerator
               tender={selectedTender}
               calculation={currentCalc}
@@ -511,7 +492,22 @@ export default function App() {
                 setActiveTab('pipeline');
               }}
             />
-          ) : emptyState)}
+          ) : (
+            <div className="p-8 rounded-3xl bg-white border border-stone-200 text-center">
+              <p className="text-sm text-stone-600">
+                {selectedTender
+                  ? 'Run and review the BOQ costing first. TenDo will not create a proposal from placeholder financial figures.'
+                  : 'Select a tender first, then complete its BOQ costing before drafting a proposal.'}
+              </p>
+              <button
+                onClick={() => setActiveTab(selectedTender ? 'costing' : 'tenders')}
+                className="mt-4 h-10 px-5 rounded-xl bg-[#4d6b2f] text-white text-sm font-bold"
+              >
+                {selectedTender ? 'Open BOQ Costing' : 'Find tenders'}
+              </button>
+            </div>
+          )
+        )}
 
         {activeTab === 'commodities' && (
           <CommodityTracker
