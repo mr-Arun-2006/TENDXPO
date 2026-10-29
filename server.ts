@@ -295,14 +295,14 @@ const COMMODITY_INDEX = [
   },
 ];
 
-// Official Government Portals for scraping simulation
+// Portal registry; status describes connector configuration, not whether a third-party site itself is online.
 const OFFICIAL_PORTALS = [
-  { id: 'gem', name: 'GeM (Government e-Marketplace)', country: 'India', domain: 'gem.gov.in', status: 'Online - Polling Active' },
-  { id: 'cppp', name: 'Central Public Procurement Portal (CPPP)', country: 'India', domain: 'eprocure.gov.in', status: 'Online - Polling Active' },
-  { id: 'sam_gov', name: 'SAM.gov System for Award Management', country: 'United States', domain: 'sam.gov', status: 'Online - Polling Active' },
-  { id: 'ted_europa', name: 'TED (Tenders Electronic Daily)', country: 'European Union', domain: 'ted.europa.eu', status: 'Online - Polling Active' },
-  { id: 'railtel_nhai', name: 'RailTel & National Highways Authority', country: 'Multi-Gov', domain: 'nhai.gov.in', status: 'Online - Polling Active' },
-  { id: 'smart_cities', name: 'Smart Cities Mission Procurement', country: 'Global', domain: 'smartcities.gov.in', status: 'Online - Polling Active' },
+  { id: 'gem', name: 'GeM (Government e-Marketplace)', country: 'India', domain: 'gem.gov.in', status: 'Link only — no live connector configured' },
+  { id: 'cppp', name: 'Central Public Procurement Portal (CPPP)', country: 'India', domain: 'eprocure.gov.in', status: 'Link only — no live connector configured' },
+  { id: 'sam_gov', name: 'SAM.gov System for Award Management', country: 'United States', domain: 'sam.gov', status: 'API key required — not configured' },
+  { id: 'ted_europa', name: 'TED (Tenders Electronic Daily)', country: 'European Union', domain: 'ted.europa.eu', status: 'Live API configured' },
+  { id: 'railtel_nhai', name: 'RailTel & National Highways Authority', country: 'Multi-Gov', domain: 'nhai.gov.in', status: 'Link only — no live connector configured' },
+  { id: 'smart_cities', name: 'Smart Cities Mission Procurement', country: 'Global', domain: 'smartcities.gov.in', status: 'Link only — no live connector configured' },
 ];
 
 // Seed Tenders covering Building Construction, IT Cloud, Healthcare, Energy, and Infrastructure
@@ -512,32 +512,7 @@ const OFFICIAL_TENDERS_SEED = [
 // In-Memory store for dynamic scraped tenders & user custom tenders
 let activeTenders = [...OFFICIAL_TENDERS_SEED];
 
-// User Company Profile (Default benchmark data that can be customized)
-let companyProfile = {
-  name: 'Apex Infrastructure & Tech Consortium Ltd.',
-  annualTurnover: 8500000, // $8.5M
-  availableSolvency: 3200000, // $3.2M
-  activeProjectsCount: 4,
-  maxProjectCapacity: 8, // Operational capacity threshold
-  currentCapacityUtilizationPercent: 55, // 55% occupied, 45% bandwidth free
-  pastPerformanceRating: 4.8, // out of 5
-  certifications: [
-    'ISO 9001:2015 Quality Management',
-    'ISO 14001:2015 Environmental',
-    'ISO 45001:2018 Occupational Health & Safety',
-    'CPWD Class-1 Civil License',
-    'CMMI Level 3 Software Engineering',
-    'GST / Tax Compliant Vendor',
-  ],
-  skilledWorkforceCount: 85,
-  unskilledWorkforceCount: 160,
-  heavyMachineryCount: 24,
-  historicalWinRate: 68.4, // %
-  targetMarginPercent: 12.5,
-  currency: 'INR',
-};
-
-// User Sector Alert Profiles store (Initialized with default for user arunkumarak5808@gmail.com)
+// User Sector Alert Profiles store (Initialized with default for user demo@example.invalid)
 interface UserSectorProfileData {
   userId: string;
   targetSectors: string[];
@@ -560,7 +535,7 @@ let sectorProfilesMap: Record<string, UserSectorProfileData> = {
     maxBudget: 2500000000, // ₹250 Cr
     preferredStates: ['All India', 'National Capital Region', 'Western Corridor'],
     emailAlertsEnabled: true,
-    alertEmail: 'arunkumarak5808@gmail.com',
+    alertEmail: 'demo@example.invalid',
     inAppAlertsEnabled: true,
     googleChatAlertsEnabled: true,
     minFitScoreThreshold: 70,
@@ -608,9 +583,9 @@ let triggeredAlerts: TenderAlertLog[] = [
     fitScore: 88,
     matchReason: 'Direct Sector Match: Civil Construction • Fit Score 88% exceeds 70% benchmark • Budget within operational capacity',
     deliveryChannels: ['email', 'in_app', 'google_chat'],
-    emailStatus: 'Dispatched to arunkumarak5808@gmail.com',
+    emailStatus: 'Dispatched to demo@example.invalid',
     emailPreview: {
-      to: 'arunkumarak5808@gmail.com',
+      to: 'demo@example.invalid',
       subject: '🚨 [TenDo Alert] CPWD Multi-Storey Administrative Headquarters (NIT-892) - 88% Fit Score',
       previewText: 'A high-viability Civil Construction tender has been scraped on CPPP. Budget: ₹40.2 Cr. Submission deadline in 4 days.',
       htmlBody: 'Official tender matching your target criteria. Direct BOQ & Cost estimation ready in TenDo workspace.',
@@ -642,272 +617,13 @@ export interface PortalLiveEventData {
   tenderData?: any;
 }
 
-const PORTAL_MONITOR_HEALTH = [
-  {
-    portal: 'CPPP',
-    name: 'Central Public Procurement Portal (eprocure.gov.in)',
-    domain: 'eprocure.gov.in',
-    status: 'online',
-    tendersToday: 148,
-    lastPolled: new Date().toISOString(),
-    responseTimeMs: 24,
-    totalActiveBids: 12480,
-  },
-  {
-    portal: 'GeM',
-    name: 'Government e-Marketplace (gem.gov.in)',
-    domain: 'gem.gov.in',
-    status: 'online',
-    tendersToday: 226,
-    lastPolled: new Date().toISOString(),
-    responseTimeMs: 28,
-    totalActiveBids: 18920,
-  },
-  {
-    portal: 'NHAI',
-    name: 'National Highways Authority of India (nhai.gov.in)',
-    domain: 'nhai.gov.in',
-    status: 'online',
-    tendersToday: 42,
-    lastPolled: new Date().toISOString(),
-    responseTimeMs: 35,
-    totalActiveBids: 3410,
-  },
-  {
-    portal: 'IREPS',
-    name: 'Indian Railways E-Procurement System (ireps.gov.in)',
-    domain: 'ireps.gov.in',
-    status: 'online',
-    tendersToday: 68,
-    lastPolled: new Date().toISOString(),
-    responseTimeMs: 31,
-    totalActiveBids: 5620,
-  },
-  {
-    portal: 'State PWD',
-    name: 'State Public Works Departments (Maharashtra, UP, KA)',
-    domain: 'pwd.gov.in',
-    status: 'online',
-    tendersToday: 91,
-    lastPolled: new Date().toISOString(),
-    responseTimeMs: 34,
-    totalActiveBids: 8140,
-  },
-  {
-    portal: 'SECI',
-    name: 'Solar Energy Corporation of India (seci.co.in)',
-    domain: 'seci.co.in',
-    status: 'online',
-    tendersToday: 22,
-    lastPolled: new Date().toISOString(),
-    responseTimeMs: 40,
-    totalActiveBids: 1240,
-  },
-];
+const PORTAL_MONITOR_HEALTH: any[] = [];
 
-const RECENT_PORTAL_EVENTS: PortalLiveEventData[] = [
-  {
-    id: 'evt-init-1',
-    portal: 'CPPP',
-    eventType: 'tender_published',
-    title: 'New NIT: Composite Administrative Headquarters (G+8 Floors)',
-    refNumber: 'CPWD/EZ/2026/NIT-892',
-    tenderId: 'TND-2026-BLD-089',
-    timestamp: new Date(Date.now() - 3600000 * 2).toISOString(),
-    severity: 'success',
-    details: 'CPWD published official tender on eprocure.gov.in. Estimated value: ₹40.25 Cr.',
-    sector: 'Civil Construction',
-    budget: 402500000,
-    url: 'https://eprocure.gov.in',
-    impactNote: 'High company viability (88% match). BOQ ready for calculation.',
-  },
-  {
-    id: 'evt-init-2',
-    portal: 'GeM',
-    eventType: 'corrigendum_issued',
-    title: 'Corrigendum #2: 4-Lane Elevated Flyover & VUP (NH-44)',
-    refNumber: 'PWD/NH-44/BR-2026-44',
-    tenderId: 'TND-2026-CIV-104',
-    timestamp: new Date(Date.now() - 3600000 * 1.5).toISOString(),
-    severity: 'warning',
-    details: 'GeM Portal Corrigendum: Technical query clarification & 5-day deadline extension issued.',
-    sector: 'Roads & Highways',
-    budget: 680600000,
-    url: 'https://gem.gov.in',
-    impactNote: 'Submission deadline updated to October 24.',
-  },
-  {
-    id: 'evt-init-3',
-    portal: 'CPPP',
-    eventType: 'price_tick',
-    title: 'Commodity Index Update: Fe550D TMT Steel',
-    timestamp: new Date(Date.now() - 1800000).toISOString(),
-    severity: 'info',
-    details: 'Raw material index update: TMT Steel spot rate at ₹62,450/MT (+0.6%) on Mandi spot exchange.',
-    url: 'https://eprocure.gov.in',
-    impactNote: 'Cost estimation engine calibrated to latest raw material index.',
-  },
-  {
-    id: 'evt-init-4',
-    portal: 'IREPS',
-    eventType: 'bidding_status_update',
-    title: 'IREPS Bidder Status: 4 Consortiums Qualified in Pre-Bid',
-    refNumber: 'IREPS/DFCCIL/2026/09',
-    timestamp: new Date(Date.now() - 900000).toISOString(),
-    severity: 'info',
-    details: 'Western Dedicated Freight Corridor signaling and civil works technical opening concluded.',
-    sector: 'Civil Construction',
-    url: 'https://ireps.gov.in',
-    impactNote: 'Competitor bidding activity recorded for pipeline tracker.',
-  },
-];
+const RECENT_PORTAL_EVENTS: PortalLiveEventData[] = [];
 
-const wsClients = new Set<WebSocket>();
+// WebSocket events are emitted only by a verified source integration.
 
-function broadcastPortalEvent(event: PortalLiveEventData) {
-  RECENT_PORTAL_EVENTS.unshift(event);
-  if (RECENT_PORTAL_EVENTS.length > 50) RECENT_PORTAL_EVENTS.pop();
-
-  const payload = JSON.stringify({
-    type: 'portal:event',
-    event,
-    totalEvents: RECENT_PORTAL_EVENTS.length,
-    activeTendersCount: activeTenders.length,
-  });
-
-  for (const client of wsClients) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(payload);
-    }
-  }
-}
-
-function broadcastPortalStatus() {
-  const payload = JSON.stringify({
-    type: 'portal:status',
-    data: {
-      connectedClientsCount: wsClients.size,
-      activePortals: PORTAL_MONITOR_HEALTH,
-      activeTendersCount: activeTenders.length,
-      timestamp: new Date().toISOString(),
-    },
-  });
-
-  for (const client of wsClients) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(payload);
-    }
-  }
-}
-
-// Helper to generate a realistic live official government tender
-function generateLivePortalTender(portalName?: string) {
-  const portal = portalName || (['CPPP', 'GeM', 'NHAI', 'IREPS', 'State PWD', 'SECI'][Math.floor(Math.random() * 6)]);
-  const sectorPool = [
-    {
-      sector: 'Civil Construction',
-      titles: [
-        'Construction of 500-Bed Super Specialty Hospital Wing with Modular OT Suites',
-        'Composite High-Rise Judicial Complex & Multi-Tier Courtrooms (G+12)',
-        'Urban Rejuvenation & Commercial Multi-Modal Transit Interchange Hub',
-      ],
-      authority: 'Central Public Works Department (CPWD)',
-      budgetRange: [350000000, 850000000],
-      template: 'civil_building',
-    },
-    {
-      sector: 'Roads & Highways',
-      titles: [
-        'Construction of 6-Lane Access-Controlled Bypass Expressway with 4 Major Bridges',
-        'Widening to 4-Lane with Paved Shoulders & Grade Separated Intersections (NH-48)',
-        'Pre-stressed Concrete Elevated Viaduct & ROB over Main Rail Corridor',
-      ],
-      authority: 'National Highways Authority of India (NHAI)',
-      budgetRange: [650000000, 1450000000],
-      template: 'roads_highways',
-    },
-    {
-      sector: 'Renewable Energy',
-      titles: [
-        'Design, Engineering & Commissioning of 75 MW Grid-Connected Ground Mounted Solar PV Park',
-        'Installation of 25 MWh Battery Energy Storage System (BESS) at 220kV Substation',
-        'Rooftop Solar PV (15 MW Cumulative) for Public Educational & Health Institutions',
-      ],
-      authority: 'Solar Energy Corporation of India (SECI)',
-      budgetRange: [280000000, 580000000],
-      template: 'solar_energy',
-    },
-    {
-      sector: 'IT & Cloud',
-      titles: [
-        'Statewide Unified Progressive Web App Tender & Citizen Grievance Portal Architecture',
-        'AI-Powered Intelligent Traffic Management System (ITMS) with Fiber Backbone',
-        'Smart City Integrated Command & Control Center (ICCC) Infrastructure Modernization',
-      ],
-      authority: 'Digital Governance & Smart Cities Mission',
-      budgetRange: [120000000, 240000000],
-      template: 'it_cloud',
-    },
-    {
-      sector: 'Healthcare & MedTech',
-      titles: [
-        'Turnkey Supply, Installation & 7-Year CMC of Advanced High-Field 3T MRI & CT Scanners',
-        'Automated Hospital Pneumatic Tube & Medical Gas Pipeline Delivery Network',
-      ],
-      authority: 'All India Institute of Medical Sciences (AIIMS)',
-      budgetRange: [180000000, 420000000],
-      template: 'healthcare_medtech',
-    },
-  ];
-
-  const poolItem = sectorPool[Math.floor(Math.random() * sectorPool.length)];
-  const title = poolItem.titles[Math.floor(Math.random() * poolItem.titles.length)];
-  const inrBudget = Math.floor(poolItem.budgetRange[0] + Math.random() * (poolItem.budgetRange[1] - poolItem.budgetRange[0]));
-  const refCode = `${portal.toUpperCase().replace(/\s+/g, '')}/NIT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-
-  const newTender = {
-    id: `TND-${Date.now().toString().slice(-6)}`,
-    refNumber: refCode,
-    title,
-    authority: poolItem.authority,
-    portal: portal === 'CPPP' ? 'CPPP (eprocure.gov.in)' : portal === 'GeM' ? 'GeM (gem.gov.in)' : portal === 'NHAI' ? 'NHAI (nhai.gov.in)' : portal === 'IREPS' ? 'IREPS (ireps.gov.in)' : portal === 'SECI' ? 'SECI (seci.co.in)' : 'State PWD (pwd.gov.in)',
-    sector: poolItem.sector,
-    budget: inrBudget,
-    currency: 'INR',
-    publishDate: new Date().toISOString().split('T')[0],
-    submissionDeadline: new Date(Date.now() + (12 + Math.floor(Math.random() * 15)) * 24 * 3600 * 1000).toISOString(),
-    location: 'National Strategic Corridor',
-    state: 'National Capital / Western / Southern Corridor',
-    country: 'India',
-    emdAmount: Math.round(inrBudget * 0.02),
-    performanceGuarantee: '5% of Order Value',
-    completionDurationDays: 365 + Math.floor(Math.random() * 180),
-    description: `Official government bid notification streamed via ${portal} WebSocket channel. BOQ estimation and dynamic raw material indexation active.`,
-    scopeOfWork: 'Complete engineering, procurement, construction, statutory safety approvals, and commercial deployment.',
-    eligibilityCriteria: {
-      minAnnualTurnover: Math.round(inrBudget * 0.5),
-      minExperienceYears: 7,
-      similarProjectsCount: 2,
-      requiredCertifications: ['ISO 9001:2015', 'Class-1 Contractor License'],
-      minSolvencyCertificate: Math.round(inrBudget * 0.3),
-    },
-    status: 'Discovered',
-    companyFitScore: Math.floor(78 + Math.random() * 18),
-    feasibilityVerdict: 'High Viability',
-    competitorBidsCount: Math.floor(2 + Math.random() * 5),
-    lastScraped: 'Live WebSocket Stream',
-    addendums: [],
-    documents: [
-      { name: `NIT_${refCode.replace(/\//g, '_')}.pdf`, size: '3.4 MB', type: 'NIT' },
-      { name: 'Schedule_BOQ_Quantities.xlsx', size: '1.4 MB', type: 'BOQ' },
-    ],
-    defaultBiddingTemplate: poolItem.template,
-  };
-
-  activeTenders.unshift(newTender);
-  executeCloudFunctionTenderMatch(newTender);
-  return newTender;
-}
+// Synthetic portal tender generation is intentionally removed. Add a source adapter before publishing scan results.
 
 // Initialize WebSocketServer mounted on /ws/portals
 const wss = new WebSocketServer({ noServer: true });
@@ -936,7 +652,7 @@ wss.on('connection', (ws: WebSocket) => {
         serverTime: new Date().toISOString(),
         activePortals: PORTAL_MONITOR_HEALTH,
         connectedClientsCount: wsClients.size,
-        recentEvents: RECENT_PORTAL_EVENTS.slice(0, 20),
+        recentEvents: [],
         currentCommodities: COMMODITY_INDEX,
         activeTendersCount: activeTenders.length,
         protocol: 'TenDo Real-Time Official Portals Stream v2.1',
@@ -958,24 +674,12 @@ wss.on('connection', (ws: WebSocket) => {
           })
         );
       } else if (msg.type === 'client:trigger_scan') {
-        const portal = msg.portal || 'CPPP';
-        const newTender = generateLivePortalTender(portal);
-        broadcastPortalEvent({
-          id: `evt-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-          portal,
-          eventType: 'tender_published',
-          title: `Fresh Discovery on ${portal}: ${newTender.title}`,
-          refNumber: newTender.refNumber,
-          tenderId: newTender.id,
+        ws.send(JSON.stringify({
+          type: 'portal:scan_unavailable',
+          portal: msg.portal || 'CPPP',
+          message: 'A verified live connector is not configured for this portal. Open the official source instead.',
           timestamp: new Date().toISOString(),
-          severity: 'success',
-          details: `Scraped live from ${portal} (${newTender.authority}). Budget: ₹${(newTender.budget / 10000000).toFixed(2)} Cr.`,
-          sector: newTender.sector,
-          budget: newTender.budget,
-          url: `https://${portal === 'GeM' ? 'gem.gov.in' : portal === 'NHAI' ? 'nhai.gov.in' : 'eprocure.gov.in'}`,
-          impactNote: `Fit Score: ${newTender.companyFitScore}% • Pre-qualification ready in workspace`,
-          tenderData: newTender,
-        });
+        }));
       }
     } catch (err) {
       console.warn('Error handling WS message:', err);
@@ -993,95 +697,7 @@ wss.on('connection', (ws: WebSocket) => {
   });
 });
 
-// Periodic live portal feed generator (every 18 seconds)
-let liveFeedTick = 0;
-setInterval(() => {
-  if (wsClients.size === 0) return; // Only process when clients connected to preserve resources
-
-  liveFeedTick++;
-  const cycleType = liveFeedTick % 4;
-
-  if (cycleType === 0) {
-    const newTender = generateLivePortalTender();
-    const portalName = newTender.portal.split(' ')[0] || 'CPPP';
-    broadcastPortalEvent({
-      id: `evt-live-${Date.now()}`,
-      portal: portalName,
-      eventType: 'tender_published',
-      title: `[Official NIT Published] ${newTender.title}`,
-      refNumber: newTender.refNumber,
-      tenderId: newTender.id,
-      timestamp: new Date().toISOString(),
-      severity: 'success',
-      details: `New NIT published by ${newTender.authority} on ${newTender.portal}. Budget: ₹${(newTender.budget / 10000000).toFixed(2)} Cr.`,
-      sector: newTender.sector,
-      budget: newTender.budget,
-      url: `https://${portalName === 'GeM' ? 'gem.gov.in' : portalName === 'NHAI' ? 'nhai.gov.in' : 'eprocure.gov.in'}`,
-      impactNote: `Fit Score: ${newTender.companyFitScore}% • Costing engine pre-loaded`,
-      tenderData: newTender,
-    });
-  } else if (cycleType === 1) {
-    const portals = ['CPPP', 'GeM', 'NHAI', 'State PWD'];
-    const p = portals[Math.floor(Math.random() * portals.length)];
-    const corrigendumTitles = [
-      'Corrigendum #1: Extension of Technical Bid Opening by 7 Days',
-      'Corrigendum: Revised Pre-Bid Query Clarifications & Addendum R2',
-      'Addendum: Steel & Cement Price Variation Index Clause (PV) Activated',
-      'Corrigendum: Clarification on Performance Bank Guarantee (PBG) Submission Modality',
-    ];
-    const cTitle = corrigendumTitles[Math.floor(Math.random() * corrigendumTitles.length)];
-    broadcastPortalEvent({
-      id: `evt-live-${Date.now()}`,
-      portal: p,
-      eventType: 'corrigendum_issued',
-      title: `[${p} Corrigendum] ${cTitle}`,
-      timestamp: new Date().toISOString(),
-      severity: 'warning',
-      details: `Official amendment uploaded on ${p} procurement portal. Revised tender schedule active.`,
-      url: `https://${p === 'GeM' ? 'gem.gov.in' : p === 'NHAI' ? 'nhai.gov.in' : 'eprocure.gov.in'}`,
-      impactNote: 'Auto-recalculated project timeline and buffer days.',
-    });
-  } else if (cycleType === 2) {
-    const commIndex = Math.floor(Math.random() * COMMODITY_INDEX.length);
-    const comm = COMMODITY_INDEX[commIndex];
-    const fluctuationPercent = Math.random() * 1.6 - 0.8;
-    const oldPrice = comm.currentPrice;
-    const newPrice = Math.round(oldPrice * (1 + fluctuationPercent / 100) * 100) / 100;
-    comm.currentPrice = newPrice;
-    comm.change7d = Math.round((comm.change7d + fluctuationPercent) * 10) / 10;
-    comm.trend = fluctuationPercent >= 0 ? 'up' : 'down';
-    if (comm.history && comm.history.length > 0) {
-      comm.history.push(newPrice);
-      if (comm.history.length > 10) comm.history.shift();
-    }
-
-    broadcastPortalEvent({
-      id: `evt-live-${Date.now()}`,
-      portal: 'CPPP',
-      eventType: 'price_tick',
-      title: `Commodity Market Index: ${comm.name}`,
-      timestamp: new Date().toISOString(),
-      severity: 'info',
-      details: `Spot rate updated to ₹${(newPrice * (comm.currency === 'INR' ? 1 : 83)).toLocaleString()} / ${comm.unit} (${fluctuationPercent >= 0 ? '+' : ''}${fluctuationPercent.toFixed(1)}%).`,
-      impactNote: 'Live BOQ Cost estimation recalculated automatically.',
-    });
-  } else {
-    PORTAL_MONITOR_HEALTH.forEach((portal) => {
-      portal.lastPolled = new Date().toISOString();
-      portal.responseTimeMs = Math.floor(20 + Math.random() * 25);
-    });
-    broadcastPortalEvent({
-      id: `evt-live-${Date.now()}`,
-      portal: 'GeM',
-      eventType: 'scraper_pulse',
-      title: 'Synchronized Official Portals Scraper Pulse: All Systems Online',
-      timestamp: new Date().toISOString(),
-      severity: 'info',
-      details: 'Active polling across CPPP, GeM, NHAI, IREPS, State PWD, and SECI completed with average response time of 26ms.',
-      impactNote: 'Real-time WebSocket connection healthy.',
-    });
-  }
-}, 18000);
+// No periodic synthetic events. Real notifications must be derived from source changes.
 
 // Core Cloud Function: Match Tender against Sector Profiles and Dispatch Alerts
 function executeCloudFunctionTenderMatch(newTender: any, targetUserId?: string) {
@@ -1106,7 +722,7 @@ function executeCloudFunctionTenderMatch(newTender: any, targetUserId?: string) 
       if (profile.emailAlertsEnabled) deliveryChannels.push('email');
       if (profile.googleChatAlertsEnabled) deliveryChannels.push('google_chat');
 
-      const recipientEmail = profile.alertEmail || 'arunkumarak5808@gmail.com';
+      const recipientEmail = profile.alertEmail || 'demo@example.invalid';
       const formattedInr = inrBudget >= 10000000
         ? `₹${(inrBudget / 10000000).toFixed(2)} Crore`
         : `₹${(inrBudget / 100000).toFixed(2)} Lakh`;
@@ -1165,114 +781,12 @@ function executeCloudFunctionTenderMatch(newTender: any, targetUserId?: string) 
   return matches;
 }
 
-// API: Cloud Function - Trigger Scraper & Sector Profile Notification Matcher
-app.post('/api/cloud-functions/scraper-trigger', requireAuth, (req, res) => {
-  const { sector, profileOverride } = req.body || {};
-
-  const targetId = (req as AuthedRequest).user!.uid;
-  if (profileOverride) {
-    sectorProfilesMap[targetId] = {
-      ...sectorProfilesMap[targetId],
-      ...profileOverride,
-      userId: targetId,
-      updatedAt: new Date().toISOString(),
-    };
-  }
-
-  const activeProfile = sectorProfilesMap[targetId] || sectorProfilesMap.default_user;
-  const matchedSector = sector || activeProfile.targetSectors[0] || 'Civil Construction';
-  const newRefNumber = `CPWD/NIT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-
-  const newlyScrapedTender = {
-    id: `TND-${Date.now().toString().slice(-6)}`,
-    refNumber: newRefNumber,
-    title: matchedSector === 'Civil Construction'
-      ? 'Construction of Multi-Level Smart Institutional Complex & Laboratories'
-      : matchedSector === 'Roads & Highways'
-      ? 'Upgradation to 4-Lane Paved Shoulder Highway Corridor with PSC Bridges'
-      : matchedSector === 'Renewable Energy'
-      ? 'Turnkey 40 MW Solar PV Plant Engineering, Erection & Grid Interconnect'
-      : matchedSector === 'Healthcare & MedTech'
-      ? 'Supply & 5-Year Comprehensive Maintenance of Critical Hospital Diagnostic Systems'
-      : 'Enterprise Digital Governance Procurement Gateway & Cloud Services',
-    authority: matchedSector === 'Civil Construction'
-      ? 'Central Public Works Department (CPWD)'
-      : matchedSector === 'Roads & Highways'
-      ? 'National Highways Authority (NHAI)'
-      : matchedSector === 'Renewable Energy'
-      ? 'Solar Energy Corporation of India (SECI)'
-      : 'State Procurement Directorate',
-    portal: 'GeM (gem.gov.in) & CPPP (eprocure.gov.in)',
-    sector: matchedSector,
-    budget: Math.floor(3400000 + Math.random() * 2600000),
-    currency: 'INR',
-    publishDate: new Date().toISOString().split('T')[0],
-    submissionDeadline: new Date(Date.now() + 8 * 24 * 3600 * 1000).toISOString(),
-    location: 'National Capital Region, Zone 4',
-    state: 'National Capital Region',
-    country: 'India',
-    emdAmount: 680000,
-    performanceGuarantee: '5% of Order Value',
-    completionDurationDays: 300,
-    description: 'Freshly scraped tender notice from official procurement portal. Cloud function evaluated against user sector profile.',
-    scopeOfWork: 'Structural RCC works, TMT Steel 450 MT, Ready Mix Concrete 3,600 m³, Labor deployment 80 workers for 300 days.',
-    eligibilityCriteria: {
-      minAnnualTurnover: 50000000,
-      minExperienceYears: 7,
-      similarProjectsCount: 2,
-      requiredCertifications: ['ISO 9001:2015', 'CPWD Class-1 Civil License'],
-      minSolvencyCertificate: 20000000,
-    },
-    status: 'Discovered',
-    companyFitScore: Math.floor(82 + Math.random() * 12),
-    feasibilityVerdict: 'High Viability',
-    competitorBidsCount: Math.floor(3 + Math.random() * 4),
-    lastScraped: 'Just now by Cloud Function',
-    addendums: [],
-    documents: [
-      { name: `NIT_${newRefNumber}.pdf`, size: '3.1 MB', type: 'NIT' },
-      { name: 'Schedule_BOQ.xlsx', size: '1.2 MB', type: 'BOQ' },
-    ],
-    defaultBiddingTemplate: 'civil_building',
-  };
-
-  activeTenders.unshift(newlyScrapedTender);
-  const matchResults = executeCloudFunctionTenderMatch(newlyScrapedTender, targetId);
-
-  // Broadcast to all active WebSocket clients in real-time
-  broadcastPortalEvent({
-    id: `evt-cf-${Date.now()}`,
-    portal: 'GeM',
-    eventType: 'tender_published',
-    title: `[Cloud Function Match] ${newlyScrapedTender.title}`,
-    refNumber: newRefNumber,
-    tenderId: newlyScrapedTender.id,
-    timestamp: new Date().toISOString(),
-    severity: 'success',
-    details: `Scraped by Cloud Function for profile ${activeProfile.alertEmail}. Budget: ₹${(newlyScrapedTender.budget / 10000000).toFixed(2)} Cr.`,
-    sector: newlyScrapedTender.sector,
-    budget: newlyScrapedTender.budget,
-    url: 'https://gem.gov.in',
-    impactNote: `Fit Score: ${newlyScrapedTender.companyFitScore}% • Email alert dispatched`,
-    tenderData: newlyScrapedTender,
-  });
-
-  res.json({
-    status: 'success',
-    cloudFunction: 'tenderAlertMatcher_v1',
-    timestamp: new Date().toISOString(),
-    trace: [
-      `1. Portal Scraper queried GeM (gem.gov.in) and CPPP (eprocure.gov.in) at ${new Date().toLocaleTimeString('en-IN')}`,
-      `2. Identified new official tender: [${newRefNumber}] "${newlyScrapedTender.title}" in sector "${newlyScrapedTender.sector}"`,
-      `3. Evaluated against User Sector Profile for ${activeProfile.alertEmail}: Target Sectors [${activeProfile.targetSectors.join(', ')}]`,
-      `4. Match status: SUCCESS (Fit Score: ${newlyScrapedTender.companyFitScore}%, Threshold: ${activeProfile.minFitScoreThreshold}%)`,
-      `5. Firebase In-App Notification created with document ID`,
-      `6. Email Alert generated & queued for dispatch to: ${activeProfile.alertEmail}`,
-    ],
-    tender: newlyScrapedTender,
-    matchedAlert: matchResults[0]?.alert || null,
-    recipientEmail: activeProfile.alertEmail,
-    totalAlerts: triggeredAlerts.length,
+// This endpoint intentionally does not fabricate tender records or alert-delivery receipts.
+app.post('/api/cloud-functions/scraper-trigger', requireAuth, (_req, res) => {
+  res.status(501).json({
+    status: 'not_configured',
+    message: 'A verified tender ingestion and notification backend is not configured for this source yet.',
+    source: 'none',
   });
 });
 
@@ -1320,21 +834,27 @@ app.post('/api/user-alerts/:alertId/read', requireAuth, (req, res) => {
 });
 
 // API: Get Commodities Index with Real-Time Fluctuations
-app.get('/api/commodities', (req, res) => {
+app.get('/api/commodities', (_req, res) => {
   res.json({
     status: 'success',
-    updatedAt: new Date().toISOString(),
+    responseGeneratedAt: new Date().toISOString(),
+    dataSource: 'illustrative-sample-rates',
+    livePriceProviderConnected: false,
+    warning: 'These rates and histories are illustrative assumptions, not live market quotations. Verify prices with suppliers before bidding.',
     indexCount: COMMODITY_INDEX.length,
     commodities: COMMODITY_INDEX,
   });
 });
 
 // API: Get Official Government Portals Status
-app.get('/api/portals', (req, res) => {
+app.get('/api/portals', (_req, res) => {
   res.json({
     status: 'success',
     portals: OFFICIAL_PORTALS,
-    activeTenderCount: activeTenders.length,
+    sourceOfTruth: '/api/sources',
+    countMeaning: 'activeTenderCount is not a live portal count; use /api/tenders and inspect each record dataSource.',
+    liveSourceIds: SOURCE_REGISTRY.filter((source) => source.access === 'live-api').map((source) => source.id),
+    activeTenderCount: activeTenders.filter((t: any) => t.dataSource !== 'sample').length,
   });
 });
 
@@ -1352,105 +872,29 @@ app.get('/api/tenders', async (req, res) => {
   });
 });
 
-// API: Scrape / Refresh Portals with Auto-Cloud Function Trigger
-app.post('/api/scrape-portal', requireAuth, (req, res) => {
-  const { portalId, sector } = req.body || {};
-  const userId = (req as AuthedRequest).user!.uid;
-  
-  const scrapedCount = Math.floor(Math.random() * 2) + 1;
-  const newRefNumber = `NIT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-
-  const potentialNewTender = {
-    id: `TND-${Date.now().toString().slice(-6)}`,
-    refNumber: newRefNumber,
-    title: sector === 'IT & Cloud'
-      ? 'Turnkey Cloud Migrations & High-Availability Procurement Gateway'
-      : sector === 'Roads & Highways'
-      ? 'Construction of 6-Lane Expressway Interchange with Reinforced Soil Retaining Walls'
-      : 'Modern Urban Infrastructure, Drainage & Civil Utility Ducting Project',
-    authority: sector === 'IT & Cloud' ? 'State Electronics Development Corp' : 'Municipal Urban Development Board',
-    portal: portalId ? OFFICIAL_PORTALS.find(p => p.id === portalId)?.name || 'GeM (gem.gov.in)' : 'GeM (gem.gov.in)',
-    sector: sector || 'Civil Construction',
-    budget: Math.floor(2800000 + Math.random() * 3200000),
-    currency: 'USD',
-    publishDate: new Date().toISOString().split('T')[0],
-    submissionDeadline: new Date(Date.now() + (6 + Math.floor(Math.random() * 8)) * 24 * 3600 * 1000).toISOString(),
-    location: 'Metropolitan District Zone 3',
-    state: 'State Capital Zone',
-    country: 'India',
-    emdAmount: Math.floor(50000 + Math.random() * 30000),
-    performanceGuarantee: '5% of Contract Value',
-    completionDurationDays: 240,
-    description: 'Freshly scraped tender notice from official procurement portal. Real-time criteria matching initiated against corporate capabilities.',
-    scopeOfWork: 'Reinforcement Steel 310 MT, Ready Mix Concrete 2,200 m³, Earthwork excavation 8,500 m³, 35 skilled masons, 180 work days.',
-    eligibilityCriteria: {
-      minAnnualTurnover: 4500000,
-      minExperienceYears: 5,
-      similarProjectsCount: 2,
-      requiredCertifications: ['ISO 9001:2015', 'Class-1 Registered Contractor'],
-      minSolvencyCertificate: 1500000,
-    },
-    status: 'Discovered',
-    companyFitScore: Math.floor(75 + Math.random() * 20),
-    feasibilityVerdict: 'High Viability',
-    competitorBidsCount: Math.floor(2 + Math.random() * 5),
-    lastScraped: 'Just now',
-    addendums: [],
-    documents: [
-      { name: `NIT_${newRefNumber}_Notice.pdf`, size: '2.9 MB', type: 'NIT' },
-      { name: 'Schedule_BOQ_Rates.xlsx', size: '1.4 MB', type: 'BOQ' },
-    ],
-    defaultBiddingTemplate: 'civil_building',
-  };
-
-  activeTenders.unshift(potentialNewTender);
-  const matchResults = executeCloudFunctionTenderMatch(potentialNewTender, userId);
-
-  res.json({
-    status: 'success',
-    message: `Scraper executed successfully across official portals. ${scrapedCount} new tender notices processed and indexed.`,
-    newTender: potentialNewTender,
-    matchedAlert: matchResults[0]?.alert || null,
-    totalTenders: activeTenders.length,
+// Do not report a scan as successful until a supported source adapter has returned verified notices.
+app.post('/api/scrape-portal', requireAuth, (_req, res) => {
+  res.status(501).json({
+    status: 'not_configured',
+    message: 'This portal connector is not configured. No tender was scraped or created.',
+    source: 'none',
   });
 });
 
-// API: Update Tender Status (For Pipeline Tracking)
-app.post('/api/tenders/:id/status', requireAuth, (req, res) => {
-  const { id } = req.params;
-  const { status, companyFitScore, customNotes } = req.body;
-
-  const tender = activeTenders.find(t => t.id === id);
-  if (!tender) {
-    return res.status(404).json({ status: 'error', message: 'Tender not found' });
-  }
-
-  if (status) tender.status = status;
-  if (companyFitScore !== undefined) tender.companyFitScore = companyFitScore;
-  if (customNotes) (tender as any).customNotes = customNotes;
-
-  res.json({
-    status: 'success',
-    tender,
+// Personal bid stages are stored in the signed-in user's Firestore namespace by the frontend.
+app.post('/api/tenders/:id/status', requireAuth, (_req, res) => {
+  res.status(410).json({
+    status: 'use_user_scoped_storage',
+    message: 'This shared tender-stage endpoint is retired. Save personal pipeline state in your own user-scoped record.',
   });
 });
 
-// API: Get Company Profile
-app.get('/api/company-profile', (req, res) => {
-  res.json({
-    status: 'success',
-    profile: companyProfile,
-  });
+// Company profiles are private Firestore documents owned by the signed-in user.
+app.get('/api/company-profile', (_req, res) => {
+  res.status(410).json({ status: 'retired', message: 'Company profiles are stored in authenticated user-scoped Firestore documents.' });
 });
-
-// API: Update Company Profile
-app.post('/api/company-profile', requireAuth, (req, res) => {
-  const updates = req.body || {};
-  companyProfile = { ...companyProfile, ...updates };
-  res.json({
-    status: 'success',
-    profile: companyProfile,
-  });
+app.post('/api/company-profile', (_req, res) => {
+  res.status(410).json({ status: 'retired', message: 'Company profiles are stored in authenticated user-scoped Firestore documents.' });
 });
 
 // API: Gemini-Powered Feasibility Analysis
@@ -1700,6 +1144,17 @@ const pickLang = (v: any): string => {
   return pickLang(val);
 };
 
+function classifyTedSector(notice: any): string {
+  const raw = JSON.stringify(notice?.['classification-cpv'] ?? '');
+  const codes = Array.from(raw.matchAll(/\\b(\\d{8})\\b/g), (match) => match[1]);
+  if (codes.some((code) => code.startsWith('4523'))) return 'Roads & Highways';
+  if (codes.some((code) => code.startsWith('45'))) return 'Civil Construction';
+  if (codes.some((code) => code.startsWith('33'))) return 'Healthcare & MedTech';
+  if (codes.some((code) => code.startsWith('48') || code.startsWith('72') || code.startsWith('30'))) return 'IT & Cloud';
+  if (codes.some((code) => code.startsWith('09') || code.startsWith('31'))) return 'Renewable Energy';
+  return 'Unclassified';
+}
+
 async function fetchTedTenders(): Promise<TedTender[]> {
   if (Date.now() - tedCache.at < 15 * 60_000 && (tedCache.tenders.length || tedCache.error)) {
     return tedCache.tenders;
@@ -1736,7 +1191,7 @@ async function fetchTedTenders(): Promise<TedTender[]> {
         title: pickLang(n['notice-title']) || `TED notice ${pubNo}`,
         authority: pickLang(n['buyer-name']) || 'Not stated',
         portal: 'TED (ted.europa.eu)',
-        sector: 'IT & Cloud',
+        sector: classifyTedSector(n),
         budget: value,
         currency: 'EUR',
         publishDate: String(pickLang(n['publication-date'])).slice(0, 10),
