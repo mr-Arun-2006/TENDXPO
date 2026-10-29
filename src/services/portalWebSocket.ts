@@ -19,7 +19,7 @@ class PortalWebSocketService {
   private state: PortalConnectionState = {
     connected: false,
     status: 'disconnected',
-    latencyMs: 24,
+    latencyMs: 0,
     lastPing: null,
     activePortals: [],
     connectedClientsCount: 0,
