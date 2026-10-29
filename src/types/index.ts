@@ -4,7 +4,8 @@ export type SectorType =
   | 'IT & Cloud'
   | 'Healthcare & MedTech'
   | 'Renewable Energy'
-  | 'Logistics & Defense';
+  | 'Logistics & Defense'
+  | 'Unclassified';
 
 export type CurrencyType = 'USD' | 'INR' | 'EUR';
 
