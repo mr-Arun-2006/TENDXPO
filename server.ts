@@ -794,7 +794,7 @@ app.get('/api/portals', (_req, res) => {
 app.get('/api/tenders', async (req, res) => {
   if (req.query.refresh === '1' && Date.now() - tedCache.at > 60_000) tedCache.at = 0;
   const live = await fetchTedTenders();
-  const local = activeTenders.map((t: any) => ({ ...t, dataSource: 'sample', companyFitScore: 0 }));
+  const local = activeTenders.map((t: any) => ({ ...t, dataSource: 'sample', companyFitScore: 0, feasibilityVerdict: 'Not analyzed' }));
   const all = [...live, ...local];
   res.json({
     status: 'success',
@@ -1259,7 +1259,7 @@ async function fetchTedTenders(): Promise<TedTender[]> {
         eligibilityCriteria: { minAnnualTurnover: 0, minExperienceYears: 0, similarProjectsCount: 0, requiredCertifications: [], minSolvencyCertificate: 0 },
         status: 'Discovered',
         companyFitScore: 0,
-        feasibilityVerdict: 'Conditional Bid',
+        feasibilityVerdict: 'Not analyzed',
         competitorBidsCount: 0,
         lastScraped: new Date().toISOString(),
         addendums: [],
