@@ -1,4 +1,3 @@
-import { apiJson } from '../services/api';
 import React, { useState, useEffect } from 'react';
 import {
   User as UserIcon,
@@ -60,9 +59,9 @@ export const UserAccount: React.FC<UserAccountProps> = ({
   const [alertEmail, setAlertEmail] = useState<string>(
     currentUser?.email || ''
   );
-  const [emailAlertsEnabled, setEmailAlertsEnabled] = useState<boolean>(true);
+  const [emailAlertsEnabled, setEmailAlertsEnabled] = useState<boolean>(false);
   const [inAppAlertsEnabled, setInAppAlertsEnabled] = useState<boolean>(true);
-  const [googleChatAlertsEnabled, setGoogleChatAlertsEnabled] = useState<boolean>(true);
+  const [googleChatAlertsEnabled, setGoogleChatAlertsEnabled] = useState<boolean>(false);
   const [minFitScoreThreshold, setMinFitScoreThreshold] = useState<number>(70);
 
   // Cloud Function execution state
@@ -80,27 +79,24 @@ export const UserAccount: React.FC<UserAccountProps> = ({
     const loadProfileAndAlerts = async () => {
       if (!currentUser) return;
       try {
-        // Fetch sector profile from server
-        const data = await apiJson('/api/user-sector-profile');
-        if (data.status === 'success' && data.profile) {
-          const p = data.profile;
-          if (p.targetSectors) setTargetSectors(p.targetSectors);
-          if (p.minBudget) setMinBudget(p.minBudget);
-          if (p.maxBudget) setMaxBudget(p.maxBudget);
-          if (p.alertEmail) setAlertEmail(p.alertEmail);
-          if (p.emailAlertsEnabled !== undefined) setEmailAlertsEnabled(p.emailAlertsEnabled);
-          if (p.inAppAlertsEnabled !== undefined) setInAppAlertsEnabled(p.inAppAlertsEnabled);
-          if (p.googleChatAlertsEnabled !== undefined) setGoogleChatAlertsEnabled(p.googleChatAlertsEnabled);
-          if (p.minFitScoreThreshold) setMinFitScoreThreshold(p.minFitScoreThreshold);
+        // Use the authenticated user's Firestore records; the server no longer provides shared in-memory preferences.
+        const p = await getUserSectorProfile(currentUser.uid);
+        if (p) {
+          setTargetSectors(p.targetSectors || ['Civil Construction']);
+          setMinBudget(p.minBudget ?? 0);
+          setMaxBudget(p.maxBudget ?? 0);
+          setAlertEmail(p.alertEmail || currentUser.email || '');
+          setEmailAlertsEnabled(p.emailAlertsEnabled ?? false);
+          setInAppAlertsEnabled(p.inAppAlertsEnabled ?? true);
+          setGoogleChatAlertsEnabled(p.googleChatAlertsEnabled ?? false);
+          setMinFitScoreThreshold(p.minFitScoreThreshold ?? 70);
         }
 
-        // Fetch alerts from server
-        const alertsData = await apiJson('/api/user-alerts');
-        if (alertsData.status === 'success' && alertsData.alerts) {
-          setUserAlerts(alertsData.alerts);
-        }
+        const alerts = await getUserAlerts(currentUser.uid);
+        setUserAlerts(alerts);
       } catch (err) {
-        console.warn('Fallback loading local user sector profile:', err);
+        console.warn('Could not load user-scoped sector preferences or alerts:', err);
+        showToast('Could not load saved alert preferences. Check Firestore rules and connection.');
       }
     };
 
@@ -114,7 +110,7 @@ export const UserAccount: React.FC<UserAccountProps> = ({
     );
   };
 
-  // Save Sector Profile to Firestore & Server
+  // Save sector profile to the signed-in user's Firestore namespace
   const handleSaveSectorProfile = async () => {
     setIsSavingProfile(true);
     const uid = currentUser?.uid || '';
@@ -132,18 +128,9 @@ export const UserAccount: React.FC<UserAccountProps> = ({
     };
 
     try {
-      // 1. Post to Server endpoint
-      await apiJson('/api/user-sector-profile', {
-        method: 'POST',
-        body: JSON.stringify(profilePayload),
-      });
-
-      // 2. Sync to Firebase Firestore if logged in
-      if (currentUser?.uid) {
-        await saveUserSectorProfile(currentUser.uid, profilePayload);
-      }
-
-      showToast('Sector Profile & Alert Rules saved successfully.');
+      if (!currentUser?.uid) throw new Error('Sign in to save alert preferences.');
+      await saveUserSectorProfile(currentUser.uid, profilePayload);
+      showToast('Sector preferences saved to your private account. Automatic delivery is not configured yet.');
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Could not save your profile.');
     } finally {
@@ -151,43 +138,18 @@ export const UserAccount: React.FC<UserAccountProps> = ({
     }
   };
 
-  // Trigger Live Cloud Function Scraper & Matcher
+  // Report the current integration state without fabricating a successful scrape or alert.
   const handleRunCloudFunction = async () => {
     setIsExecutingCloudFunction(true);
-    setCloudFunctionLogs(['Initiating Cloud Function: tenderAlertMatcher_v1...']);
     setLastDispatchedAlert(null);
-
-    try {
-      const data = await apiJson('/api/cloud-functions/scraper-trigger', {
-        method: 'POST',
-        body: JSON.stringify({
-          sector: targetSectors[0] || 'Civil Construction',
-          profileOverride: {
-            targetSectors,
-            minBudget,
-            maxBudget,
-            alertEmail,
-            emailAlertsEnabled,
-            inAppAlertsEnabled,
-            googleChatAlertsEnabled,
-            minFitScoreThreshold,
-          },
-        }),
-      });
-
-      if (data.status === 'success') {
-        setCloudFunctionLogs(data.trace || []);
-        if (data.matchedAlert) {
-          setLastDispatchedAlert(data.matchedAlert);
-          setUserAlerts((prev) => [data.matchedAlert, ...prev]);
-        }
-        showToast('Cloud Function triggered: New matching bid scraped and alert dispatched!');
-      }
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Alert matcher could not run.');
-    } finally {
-      setIsExecutingCloudFunction(false);
-    }
+    setCloudFunctionLogs([
+      'Verified live connectors configured: TED (European Union) only.',
+      'GeM and CPPP are currently link-out sources; no automated scan was performed.',
+      'No tender was fabricated and no email or external notification was sent.',
+      'Alert delivery requires a verified feed, persistent scheduler, and configured delivery provider.',
+    ]);
+    showToast('Connector status checked. No tender scan or alert was triggered.');
+    setIsExecutingCloudFunction(false);
   };
 
   const displayName = currentUser?.displayName || currentUser?.email?.split('@')[0] || 'User';
@@ -243,7 +205,7 @@ export const UserAccount: React.FC<UserAccountProps> = ({
           }`}
         >
           <Zap className="w-4 h-4 text-[#4d6b2f]" />
-          <span>Sector Profile & Cloud Function Trigger</span>
+          <span>Sector Alerts & Preferences</span>
         </button>
 
         <button
@@ -255,7 +217,7 @@ export const UserAccount: React.FC<UserAccountProps> = ({
           }`}
         >
           <Bell className="w-4 h-4 text-[#4d6b2f]" />
-          <span>Dispatched Alerts History ({userAlerts.length})</span>
+          <span>Alert History ({userAlerts.length})</span>
         </button>
 
         <button
@@ -271,20 +233,20 @@ export const UserAccount: React.FC<UserAccountProps> = ({
         </button>
       </div>
 
-      {/* Tab 1: Sector Profile & Cloud Function Trigger (Main User Request) */}
+      {/* Tab 1: Sector profile and alert preferences */}
       {activeSubTab === 'sector_alerts' && (
         <div className="space-y-6">
-          {/* Cloud Function Scraper Action Banner */}
+          {/* Source connector status */}
           <div className="p-6 rounded-3xl bg-linear-to-r from-stone-900 to-stone-800 text-white shadow-md space-y-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="space-y-1">
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#4d6b2f]/30 text-[#a3cb78] text-[10px] font-bold uppercase tracking-wider">
                   <Zap className="w-3 h-3" />
-                  <span>Cloud Function: tenderAlertMatcher_v1</span>
+                  <span>Connector status</span>
                 </div>
-                <h3 className="text-lg font-black">Automated Sector Scraper & Notification Trigger</h3>
+                <h3 className="text-lg font-black">Tender alert preferences</h3>
                 <p className="text-xs text-stone-300 max-w-xl leading-relaxed">
-                  When new bids are scraped from GeM and CPPP, this Cloud Function checks your target sectors and dispatches an instant email alert to <strong className="text-white underline">{alertEmail}</strong>.
+                  Your sector, budget and notification preferences are saved to your account. Automatic GeM/CPPP monitoring and delivery are not enabled; only configured source integrations can trigger real alerts.
                 </p>
               </div>
 
@@ -294,16 +256,16 @@ export const UserAccount: React.FC<UserAccountProps> = ({
                 className="px-5 py-3 rounded-2xl bg-[#4d6b2f] hover:bg-[#3f5724] text-white font-bold text-xs shadow-lg transition active:scale-95 flex items-center gap-2 shrink-0"
               >
                 <RefreshCw className={`w-4 h-4 ${isExecutingCloudFunction ? 'animate-spin' : ''}`} />
-                <span>{isExecutingCloudFunction ? 'Executing Cloud Function...' : 'Test Cloud Function Scraper Now'}</span>
+                <span>{isExecutingCloudFunction ? 'Executing Cloud Function...' : 'Check connector status'}</span>
               </button>
             </div>
 
-            {/* Cloud Function Execution Trace Box */}
+            {/* Connector status details */}
             {cloudFunctionLogs.length > 0 && (
               <div className="p-4 rounded-2xl bg-stone-950/80 border border-stone-700/60 font-mono text-xs space-y-1.5 text-stone-300">
                 <p className="text-[11px] font-bold text-[#86a95f] uppercase tracking-wider flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Cloud Execution Trace Output:</span>
+                  <span>Connector status report:</span>
                 </p>
                 {cloudFunctionLogs.map((log, i) => (
                   <p key={i} className="text-[11px] leading-relaxed">
@@ -321,7 +283,7 @@ export const UserAccount: React.FC<UserAccountProps> = ({
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-ping" />
                   <h4 className="text-xs font-black text-emerald-900 uppercase tracking-wide">
-                    New Alert Fired by Cloud Function:
+                    Recorded alert:
                   </h4>
                 </div>
                 <span className="text-[11px] font-mono text-emerald-700 font-bold">
@@ -438,7 +400,7 @@ export const UserAccount: React.FC<UserAccountProps> = ({
                   className="w-full accent-[#4d6b2f]"
                 />
                 <p className="text-[11px] text-stone-500">
-                  Only trigger notifications when the AI prequalification check scores the bid above this threshold.
+                  Use this threshold when matching is connected. Live matching and automatic delivery are not configured yet.
                 </p>
               </div>
             </div>
@@ -533,9 +495,9 @@ export const UserAccount: React.FC<UserAccountProps> = ({
         <div className="p-6 rounded-3xl bg-white border border-stone-200 shadow-2xs space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-base font-black text-stone-900">Dispatched Tender Notifications</h3>
+              <h3 className="text-base font-black text-stone-900">Saved Tender Alerts</h3>
               <p className="text-xs text-stone-500">
-                Log of all government tenders matching your profile triggered by the Cloud Function
+                Alerts recorded for your account. Automatic alert creation is not enabled until verified feeds and delivery services are configured.
               </p>
             </div>
             <button

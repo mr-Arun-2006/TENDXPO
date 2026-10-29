@@ -36,9 +36,20 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
   const [aiAuditResult, setAiAuditResult] = useState<FeasibilityResult | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
 
-  const requiredTurnover = tender.eligibilityCriteria?.minAnnualTurnover || tender.budget * 0.8;
-  const turnoverRatio = companyProfile.annualTurnover / requiredTurnover;
-  const availableCapacity = 100 - companyProfile.currentCapacityUtilizationPercent;
+  const requiredTurnover = Number(tender.eligibilityCriteria?.minAnnualTurnover || 0);
+  const turnoverRatio =
+    requiredTurnover > 0 &&
+    companyProfile.annualTurnover > 0 &&
+    companyProfile.currency === tender.currency
+      ? companyProfile.annualTurnover / requiredTurnover
+      : null;
+  const capacityKnown =
+    companyProfile.maxProjectCapacity > 0 &&
+    Number.isFinite(companyProfile.currentCapacityUtilizationPercent) &&
+    companyProfile.currentCapacityUtilizationPercent >= 0 &&
+    companyProfile.currentCapacityUtilizationPercent <= 100;
+  const availableCapacity = capacityKnown ? 100 - companyProfile.currentCapacityUtilizationPercent : null;
+  const companyProfileReady = Boolean(companyProfile.name.trim() && companyProfile.annualTurnover > 0);
 
   const handleRunAiAudit = async () => {
     setIsAnalyzing(true);
@@ -50,7 +61,7 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
       });
       if (data.status === 'success' && data.data) {
         setAiAuditResult(data.data);
-        if (data.data.fitScore) {
+        if (typeof data.data.fitScore === 'number') {
           onUpdateTenderFitScore(tender.id, data.data.fitScore);
         }
       }
@@ -61,8 +72,8 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
     }
   };
 
-  const fit = getFitScoreColor(aiAuditResult ? aiAuditResult.fitScore : tender.companyFitScore);
-  const currentFitScore = aiAuditResult ? aiAuditResult.fitScore : tender.companyFitScore;
+  const currentFitScore = aiAuditResult ? aiAuditResult.fitScore : null;
+  const fit = getFitScoreColor(currentFitScore ?? 0);
 
   return (
     <div className="space-y-6">
@@ -84,7 +95,7 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
         <div className="flex items-center gap-2.5">
           <button
             onClick={handleRunAiAudit}
-            disabled={isAnalyzing}
+            disabled={isAnalyzing || !companyProfileReady}
             className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-[#4d6b2f] hover:bg-[#3f5724] text-white font-bold text-xs shadow-xs transition active:scale-95 disabled:opacity-50"
           >
             <Sparkles className={`w-4 h-4 ${isAnalyzing ? 'animate-spin' : ''}`} />
@@ -104,6 +115,17 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
         </div>
       </div>
 
+      {!companyProfileReady && (
+        <div role="status" className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm">
+          Complete your company name and annual turnover in Company Settings before running eligibility analysis.
+        </div>
+      )}
+      {tender.dataSource === 'sample' && (
+        <div role="status" className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm">
+          Sample tender only — this is not a verified bidding opportunity. Do not use its dates, values or requirements for a real bid.
+        </div>
+      )}
+
       {/* Score Overview and Verdict Card */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Company Fit Score Gauge */}
@@ -121,8 +143,8 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
                 d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
               />
               <path
-                className={currentFitScore >= 80 ? 'text-[#4d6b2f]' : 'text-amber-500'}
-                strokeDasharray={`${currentFitScore}, 100`}
+                className={currentFitScore !== null && currentFitScore >= 80 ? 'text-[#4d6b2f]' : 'text-amber-500'}
+                strokeDasharray={`${currentFitScore ?? 0}, 100`}
                 strokeWidth="3.8"
                 strokeLinecap="round"
                 stroke="currentColor"
@@ -131,15 +153,15 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
               />
             </svg>
             <div className="absolute flex flex-col items-center">
-              <span className="text-3xl font-black text-stone-900 font-mono">{currentFitScore}%</span>
+              <span className="text-3xl font-black text-stone-900 font-mono">{currentFitScore === null ? '—' : String(currentFitScore) + '%'}</span>
               <span className="text-[10px] text-stone-500 font-bold uppercase tracking-wide">Alignment</span>
             </div>
           </div>
 
           <div
-            className={`mt-4 px-3.5 py-1 rounded-full text-xs font-bold border ${fit.bg} ${fit.border} ${fit.text}`}
+            className={`mt-4 px-3.5 py-1 rounded-full text-xs font-bold border ${aiAuditResult ? fit.bg + ' ' + fit.border + ' ' + fit.text : 'bg-stone-100 border-stone-200 text-stone-600'}`}
           >
-            {aiAuditResult?.verdict || tender.feasibilityVerdict}
+            {aiAuditResult?.verdict || 'Not analyzed'}
           </div>
         </div>
 
@@ -156,29 +178,29 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
             <div className="flex justify-between text-xs mb-1.5 font-medium">
               <span className="text-stone-600">Active Commitments:</span>
               <span className="font-bold text-stone-900 font-mono">
-                {companyProfile.activeProjectsCount} of {companyProfile.maxProjectCapacity} Maximum
+                {companyProfile.maxProjectCapacity > 0 ? `${companyProfile.activeProjectsCount} of ${companyProfile.maxProjectCapacity} maximum` : 'Not provided'}
               </span>
             </div>
             <div className="w-full h-2.5 rounded-full bg-stone-100 overflow-hidden">
               <div
                 className="h-full rounded-full bg-linear-to-r from-lime-600 to-[#4d6b2f]"
-                style={{ width: `${companyProfile.currentCapacityUtilizationPercent}%` }}
+                style={{ width: `${capacityKnown ? companyProfile.currentCapacityUtilizationPercent : 0}%` }}
               ></div>
             </div>
             <div className="flex justify-between text-[11px] text-stone-500 mt-1.5">
-              <span>{companyProfile.currentCapacityUtilizationPercent}% Occupied</span>
-              <span className="text-[#3f5724] font-bold">{availableCapacity}% Available Headroom</span>
+              <span>{capacityKnown ? `${companyProfile.currentCapacityUtilizationPercent}% occupied` : 'Capacity data not provided'}</span>
+              <span className="text-[#3f5724] font-bold">{availableCapacity === null ? 'Not calculated' : `${availableCapacity}% available headroom`}</span>
             </div>
           </div>
 
           <div className="pt-2 border-t border-stone-100 space-y-2 text-xs">
             <div className="flex justify-between text-stone-600">
               <span>Available Skilled Workforce:</span>
-              <span className="text-stone-900 font-bold font-mono">{companyProfile.skilledWorkforceCount} Masons/Engs</span>
+              <span className="text-stone-900 font-bold font-mono">{companyProfile.skilledWorkforceCount > 0 ? `${companyProfile.skilledWorkforceCount} reported` : 'Not provided'}</span>
             </div>
             <div className="flex justify-between text-stone-600">
               <span>Machinery & Heavy Plant:</span>
-              <span className="text-stone-900 font-bold font-mono">{companyProfile.heavyMachineryCount} Units Active</span>
+              <span className="text-stone-900 font-bold font-mono">{companyProfile.heavyMachineryCount > 0 ? `${companyProfile.heavyMachineryCount} reported` : 'Not provided'}</span>
             </div>
           </div>
         </div>
@@ -196,31 +218,31 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
             <div className="flex justify-between text-stone-600">
               <span>Company Annual Turnover:</span>
               <span className="font-bold text-stone-900 font-mono">
-                {formatCurrency(companyProfile.annualTurnover, 'INR')}
+                {companyProfile.annualTurnover > 0 ? formatCurrency(companyProfile.annualTurnover, companyProfile.currency) : 'Not provided'}
               </span>
             </div>
             <div className="flex justify-between text-stone-600">
               <span>Required Tender Turnover:</span>
               <span className="font-bold text-stone-700 font-mono">
-                {formatCurrency(requiredTurnover, 'INR')}
+                {requiredTurnover > 0 ? formatCurrency(requiredTurnover, tender.currency) : 'Not stated in structured record'}
               </span>
             </div>
             <div className="flex justify-between text-stone-600">
               <span>Turnover Coverage Ratio:</span>
               <span className="font-bold text-[#3f5724] font-mono">
-                {turnoverRatio.toFixed(2)}x (Meets Criteria)
+                {turnoverRatio === null ? 'Not calculable from available data' : `${turnoverRatio.toFixed(2)}x (reported values; verify currency and evidence)`}
               </span>
             </div>
             <div className="flex justify-between text-stone-600 pt-1 border-t border-stone-100">
               <span>Past Performance Rating:</span>
               <span className="font-bold text-amber-600 font-mono">
-                {companyProfile.pastPerformanceRating} / 5.0 Stars
+                {companyProfile.pastPerformanceRating > 0 ? `${companyProfile.pastPerformanceRating} / 5.0 (company-reported)` : 'Not provided'}
               </span>
             </div>
             <div className="flex justify-between text-stone-600">
               <span>Historical Bid Win Rate:</span>
               <span className="font-bold text-[#4d6b2f] font-mono">
-                {companyProfile.historicalWinRate}%
+                {companyProfile.historicalWinRate > 0 ? `${companyProfile.historicalWinRate}% (company-reported)` : 'Not provided'}
               </span>
             </div>
           </div>
@@ -231,7 +253,7 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
       <div className="p-6 rounded-3xl bg-white border border-stone-200 shadow-xs space-y-4">
         <h3 className="font-black text-stone-900 text-base flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-[#4d6b2f]" />
-          <span>Pre-Qualification & Mandatory Criteria Matrix (Govt. of India e-Procurement)</span>
+          <span>Pre-Qualification & Mandatory Criteria Matrix</span>
         </h3>
 
         <div className="overflow-x-auto rounded-2xl border border-stone-200">
@@ -265,62 +287,11 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
                   </tr>
                 ))
               ) : (
-                <>
-                  <tr className="hover:bg-stone-50">
-                    <td className="py-3 px-4 font-bold text-stone-900">Annual Financial Turnover</td>
-                    <td className="py-3 px-4 text-stone-600 font-mono">
-                      &ge; {formatCurrency(requiredTurnover, 'INR')}
-                    </td>
-                    <td className="py-3 px-4 text-stone-600 font-mono">
-                      {formatCurrency(companyProfile.annualTurnover, 'INR')}
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <span className="inline-flex items-center gap-1 text-[#3f5724] font-bold">
-                        <CheckCircle className="w-4 h-4 text-[#4d6b2f]" /> Passed (1.3x)
-                      </span>
-                    </td>
-                  </tr>
-                  <tr className="hover:bg-stone-50">
-                    <td className="py-3 px-4 font-bold text-stone-900">Similar Completed Works</td>
-                    <td className="py-3 px-4 text-stone-600 font-mono">
-                      &ge; {tender.eligibilityCriteria?.similarProjectsCount || 2} projects in last 5 yrs
-                    </td>
-                    <td className="py-3 px-4 text-stone-600 font-mono">4 verified government contracts</td>
-                    <td className="py-3 px-4 text-center">
-                      <span className="inline-flex items-center gap-1 text-[#3f5724] font-bold">
-                        <CheckCircle className="w-4 h-4 text-[#4d6b2f]" /> Passed
-                      </span>
-                    </td>
-                  </tr>
-                  <tr className="hover:bg-stone-50">
-                    <td className="py-3 px-4 font-bold text-stone-900">Bank Guarantee & EMD Solvency</td>
-                    <td className="py-3 px-4 text-stone-600 font-mono">
-                      &ge; {formatCurrency(tender.emdAmount, 'INR')} liquid funds
-                    </td>
-                    <td className="py-3 px-4 text-stone-600 font-mono">
-                      {formatCurrency(companyProfile.availableSolvency, 'INR')} available
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <span className="inline-flex items-center gap-1 text-[#3f5724] font-bold">
-                        <CheckCircle className="w-4 h-4 text-[#4d6b2f]" /> Passed (3.2x)
-                      </span>
-                    </td>
-                  </tr>
-                  <tr className="hover:bg-stone-50">
-                    <td className="py-3 px-4 font-bold text-stone-900">Quality & Safety Certifications</td>
-                    <td className="py-3 px-4 text-stone-600">
-                      {tender.eligibilityCriteria?.requiredCertifications?.join(', ') || 'ISO 9001:2015'}
-                    </td>
-                    <td className="py-3 px-4 text-stone-600">
-                      ISO 9001, ISO 14001, ISO 45001, CPWD Class-1
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <span className="inline-flex items-center gap-1 text-[#3f5724] font-bold">
-                        <CheckCircle className="w-4 h-4 text-[#4d6b2f]" /> Passed
-                      </span>
-                    </td>
-                  </tr>
-                </>
+                <tr>
+                  <td colSpan={4} className="p-4 text-center text-stone-500">
+                    Run the AI feasibility audit to generate a tender-specific checklist. No eligibility criteria are marked as passed before analysis.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
@@ -332,15 +303,10 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
         <div className="p-6 rounded-3xl bg-white border border-stone-200 shadow-xs space-y-3">
           <h4 className="font-bold text-stone-900 text-sm flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-[#4d6b2f]" />
-            <span>Competitive Advantages & L1 Positioning</span>
+            <span>Evidence-backed Strengths</span>
           </h4>
           <ul className="space-y-2 text-xs text-stone-600">
-            {(aiAuditResult?.strengths || [
-              `Financial turnover (${formatCurrency(companyProfile.annualTurnover, 'INR')}) comfortably exceeds minimum benchmark.`,
-              'In-house fleet of tower cranes and batching mixers eliminates expensive third-party equipment rentals.',
-              `Flawless ${companyProfile.pastPerformanceRating}/5 track record with zero liquidated damage history across state works.`,
-              'Direct mill volume agreements for Fe550 TMT Steel ensure uninterrupted material supply.'
-            ]).map((s, i) => (
+            {(aiAuditResult?.strengths || ['Run the feasibility audit to list strengths supported by the available tender and company evidence.']).map((s, i) => (
               <li key={i} className="flex items-start gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#4d6b2f] shrink-0 mt-1.5"></span>
                 <span>{s}</span>
@@ -352,14 +318,10 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
         <div className="p-6 rounded-3xl bg-white border border-stone-200 shadow-xs space-y-3">
           <h4 className="font-bold text-stone-900 text-sm flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-600" />
-            <span>Identified Risk Bottlenecks & Escalations</span>
+            <span>Risks & Missing Evidence</span>
           </h4>
           <ul className="space-y-2 text-xs text-stone-600">
-            {(aiAuditResult?.riskFactors || [
-              `Tight execution timeline of ${tender.completionDurationDays} days requires dual-shift site operations.`,
-              'Recent steel price volatility (+4.8%) mandates a minimum 3.5% contingency price hedging buffer.',
-              'Specialized MEP and elevator packages require early pre-bid OEM tie-ups to secure tender compliance.'
-            ]).map((r, i) => (
+            {(aiAuditResult?.riskFactors || ['Run the feasibility audit to identify tender-specific risks and missing evidence. Verify material prices with current supplier quotations.']).map((r, i) => (
               <li key={i} className="flex items-start gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 mt-1.5"></span>
                 <span>{r}</span>

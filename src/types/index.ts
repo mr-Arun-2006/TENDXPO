@@ -4,7 +4,8 @@ export type SectorType =
   | 'IT & Cloud'
   | 'Healthcare & MedTech'
   | 'Renewable Energy'
-  | 'Logistics & Defense';
+  | 'Logistics & Defense'
+  | 'Unclassified';
 
 export type CurrencyType = 'USD' | 'INR' | 'EUR';
 
@@ -18,7 +19,7 @@ export type TenderStatus =
   | 'Won'
   | 'Lost';
 
-export type FeasibilityVerdict = 'High Viability' | 'Conditional Bid' | 'High Risk / No-Bid';
+export type FeasibilityVerdict = 'Not analyzed' | 'High Viability' | 'Conditional Bid' | 'High Risk / No-Bid';
 
 export interface EligibilityCriteria {
   minAnnualTurnover: number;

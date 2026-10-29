@@ -42,6 +42,56 @@ service cloud.firestore {
              (!('role' in data) || (data.role in ['bid_manager', 'estimator', 'admin', 'viewer']));
     }
 
+    function isValidCompanyProfile(data, userId) {
+      return data.keys().hasAll([
+               'userId', 'name', 'annualTurnover', 'availableSolvency',
+               'activeProjectsCount', 'maxProjectCapacity', 'currentCapacityUtilizationPercent',
+               'pastPerformanceRating', 'certifications', 'skilledWorkforceCount',
+               'unskilledWorkforceCount', 'heavyMachineryCount', 'historicalWinRate',
+               'targetMarginPercent', 'currency', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'userId', 'name', 'annualTurnover', 'availableSolvency',
+               'activeProjectsCount', 'maxProjectCapacity', 'currentCapacityUtilizationPercent',
+               'pastPerformanceRating', 'certifications', 'skilledWorkforceCount',
+               'unskilledWorkforceCount', 'heavyMachineryCount', 'historicalWinRate',
+               'targetMarginPercent', 'currency', 'profilePhoto', 'updatedAt'
+             ]) &&
+             data.userId == userId &&
+             data.name is string && data.name.size() <= 256 &&
+             data.annualTurnover is number && data.annualTurnover >= 0 &&
+             data.availableSolvency is number && data.availableSolvency >= 0 &&
+             data.activeProjectsCount is number && data.activeProjectsCount >= 0 &&
+             data.maxProjectCapacity is number && data.maxProjectCapacity >= 0 &&
+             data.currentCapacityUtilizationPercent is number &&
+             data.currentCapacityUtilizationPercent >= 0 && data.currentCapacityUtilizationPercent <= 100 &&
+             data.pastPerformanceRating is number && data.pastPerformanceRating >= 0 && data.pastPerformanceRating <= 5 &&
+             data.certifications is list && data.certifications.size() <= 100 &&
+             data.skilledWorkforceCount is number && data.skilledWorkforceCount >= 0 &&
+             data.unskilledWorkforceCount is number && data.unskilledWorkforceCount >= 0 &&
+             data.heavyMachineryCount is number && data.heavyMachineryCount >= 0 &&
+             data.historicalWinRate is number && data.historicalWinRate >= 0 && data.historicalWinRate <= 100 &&
+             data.targetMarginPercent is number && data.targetMarginPercent >= 0 && data.targetMarginPercent <= 100 &&
+             data.currency in ['INR', 'USD', 'EUR'] &&
+             data.updatedAt is string && data.updatedAt.size() <= 64 &&
+             (!('profilePhoto' in data) || (data.profilePhoto is string && data.profilePhoto.size() <= 1024));
+    }
+
+    function isValidTenderState(data, userId, tenderId) {
+      return data.keys().hasAll(['userId', 'tenderId', 'status', 'updatedAt']) &&
+             data.keys().hasOnly(['userId', 'tenderId', 'status', 'customNotes', 'updatedAt']) &&
+             data.userId == userId &&
+             data.userId == request.auth.uid &&
+             data.tenderId == tenderId &&
+             data.tenderId is string && data.tenderId.size() <= 128 &&
+             data.status in [
+               'Discovered', 'Under Feasibility', 'Estimation', 'Proposal Drafted',
+               'Submitted', 'Technical Qualified', 'Won', 'Lost'
+             ] &&
+             data.updatedAt is string && data.updatedAt.size() <= 64 &&
+             (!('customNotes' in data) || (data.customNotes is string && data.customNotes.size() <= 2048));
+    }
+
     function isValidSectorProfile(data, userId) {
       return data.keys().hasAll(['userId', 'targetSectors', 'emailAlertsEnabled', 'alertEmail']) &&
              data.userId == request.auth.uid &&
@@ -106,6 +156,24 @@ service cloud.firestore {
       allow update: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming()) && incoming().uid == existing().uid &&
                     (incoming().get('role', 'estimator') == existing().get('role', 'estimator'));
       allow delete: if isOwner(userId) && isValidId(userId);
+
+      // Private company profile used by eligibility and bid-cost analysis.
+      match /company_profile/{profileId} {
+        allow get: if isOwner(userId) && profileId == 'default';
+        allow list: if false;
+        allow create: if isOwner(userId) && profileId == 'default' && isValidCompanyProfile(incoming(), userId);
+        allow update: if isOwner(userId) && profileId == 'default' && isValidCompanyProfile(incoming(), userId) && incoming().userId == existing().userId;
+        allow delete: if isOwner(userId) && profileId == 'default';
+      }
+
+      // Personal pipeline state is separate from the shared official notice.
+      match /tender_states/{tenderId} {
+        allow get: if isOwner(userId) && isValidId(tenderId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidTenderState(incoming(), userId, tenderId);
+        allow update: if isOwner(userId) && isValidTenderState(incoming(), userId, tenderId) && incoming().userId == existing().userId;
+        allow delete: if isOwner(userId) && isValidId(tenderId);
+      }
 
       // User Sector Profile subcollection
       match /sector_profile/{profileId} {

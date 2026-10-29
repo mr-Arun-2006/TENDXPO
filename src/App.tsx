@@ -21,8 +21,7 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { GoogleChatModal } from './components/GoogleChatModal';
 import { usePortalWebSocket } from './hooks/usePortalWebSocket';
 import { User } from 'firebase/auth';
-import { initAuth, logout } from './services/firebase';
-import { apiFetch } from './services/api';
+import { getCompanyProfile, getUserTenderStates, initAuth, logout, saveCompanyProfile, saveUserTenderState } from './services/firebase';
 
 const APP_TABS = ['dashboard','tenders','assistant','pipeline','feasibility','costing','proposal','commodities','sources','account'];
 
@@ -81,14 +80,14 @@ export default function App() {
           if (prev.some((t) => t.id === latest.tenderData!.id || t.refNumber === latest.tenderData!.refNumber)) {
             return prev;
           }
-          return [{ ...latest.tenderData!, dataSource: 'sample' as const }, ...prev];
+          return [{ ...latest.tenderData!, dataSource: latest.tenderData!.dataSource || 'sample' }, ...prev];
         });
 
         const notif: PortalNotification = {
           id: `notif-${latest.id}`,
           timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
           type: 'New Tender',
-          title: `[Simulated feed] ${latest.portal}: new tender`,
+          title: latest.tenderData.dataSource === 'sample' ? `[Sample feed] ${latest.portal}: new tender` : `${latest.portal}: new tender`,
           message: `${latest.title} (₹${((latest.budget || 0) / 10000000).toFixed(2)} Cr)`,
           tenderId: latest.tenderData.id,
           severity: 'success',
@@ -120,13 +119,25 @@ export default function App() {
       const res = await fetch(refresh ? '/api/tenders?refresh=1' : '/api/tenders');
       const data = await res.json();
       if (data.status === 'success' && data.tenders) {
-        // Keep tenders the user entered by hand; everything else comes from the server.
+        let fetchedTenders: Tender[] = data.tenders;
+        if (currentUser?.uid) {
+          try {
+            const savedStates = await getUserTenderStates(currentUser.uid);
+            fetchedTenders = fetchedTenders.map((t) => {
+              const saved = savedStates[t.id];
+              return saved ? { ...t, status: saved.status, customNotes: saved.customNotes ?? t.customNotes } : t;
+            });
+          } catch (err) {
+            console.warn('Could not merge saved tender stages into refreshed data:', err);
+          }
+        }
+        // Preserve user-entered notices, and never write the user's workflow onto the shared source notice.
         setTenders((prev) => [
-          ...data.tenders,
-          ...prev.filter((t) => t.dataSource === 'user' && !data.tenders.some((x: Tender) => x.id === t.id)),
+          ...fetchedTenders,
+          ...prev.filter((t) => t.dataSource === 'user' && !fetchedTenders.some((x) => x.id === t.id)),
         ]);
-        if (!selectedTender && data.tenders.length > 0) {
-          setSelectedTender(data.tenders[0]);
+        if (!selectedTender && fetchedTenders.length > 0) {
+          setSelectedTender(fetchedTenders[0]);
         }
       }
     } catch (err) {
@@ -147,23 +158,9 @@ export default function App() {
     }
   };
 
-  // Fetch company profile
-  const fetchProfile = async () => {
-    try {
-      const res = await fetch('/api/company-profile');
-      const data = await res.json();
-      if (data.status === 'success' && data.profile) {
-        setCompanyProfile(data.profile);
-      }
-    } catch (err) {
-      console.warn('Profile fetch error:', err);
-    }
-  };
-
   useEffect(() => {
     fetchTenders();
     fetchCommodities();
-    fetchProfile();
 
     // Listen to Firebase Auth state
     const unsubscribe = initAuth(
@@ -182,6 +179,40 @@ export default function App() {
       if (unsubscribe) unsubscribe();
     };
   }, []);
+
+  // Load profile only after Firebase identifies the signed-in user.
+  useEffect(() => {
+    let cancelled = false;
+    if (!currentUser?.uid) {
+      setCompanyProfile(DEFAULT_COMPANY_PROFILE);
+      return () => { cancelled = true; };
+    }
+    getCompanyProfile(currentUser.uid)
+      .then((profile) => {
+        if (!cancelled) setCompanyProfile(profile || DEFAULT_COMPANY_PROFILE);
+      })
+      .catch((err) => {
+        console.warn('Company profile could not be loaded:', err);
+        if (!cancelled) showToast('Company profile could not be loaded. Check your Firestore rules and connection.');
+      });
+    return () => { cancelled = true; };
+  }, [currentUser?.uid]);
+
+  // Restore personal pipeline states without modifying the shared official notice.
+  useEffect(() => {
+    if (!currentUser?.uid || tenders.length === 0) return;
+    let cancelled = false;
+    getUserTenderStates(currentUser.uid)
+      .then((states) => {
+        if (cancelled) return;
+        setTenders((prev) => prev.map((t) => {
+          const saved = states[t.id];
+          return saved ? { ...t, status: saved.status, customNotes: saved.customNotes ?? t.customNotes } : t;
+        }));
+      })
+      .catch((err) => console.warn('Tender pipeline states could not be restored:', err));
+    return () => { cancelled = true; };
+  }, [currentUser?.uid, tenders.length]);
 
   // Keep route in sync with the URL hash (back/forward buttons work).
   useEffect(() => {
@@ -212,45 +243,57 @@ export default function App() {
     setIsScraping(true);
     await fetchTenders(true);
     setIsScraping(false);
-    showToast('Tender feed refreshed from official sources.');
+    showToast('Tender feed reloaded. Only configured sources provide live records; sample records are labelled.');
   };
 
   // User adds custom tender
   const handleAddNewTender = (newTenderData: Partial<Tender>) => {
     const fullTender = newTenderData as Tender;
     setTenders((prev) => [fullTender, ...prev]);
+    if (selectedTender?.id !== fullTender.id) setActiveCalculation(null);
     setSelectedTender(fullTender);
     showToast(`Added tender "${fullTender.title.slice(0, 30)}..." to pipeline.`);
   };
 
-  // Update status (e.g., from Kanban or table)
+  // Tender workflow state belongs to the current user, not to the shared tender notice.
   const handleUpdateTenderStatus = async (tenderId: string, status: TenderStatus, notes?: string) => {
+    if (!currentUser?.uid) {
+      showToast('Sign in to save your tender workflow.');
+      return;
+    }
+    const previous = tenders.find((t) => t.id === tenderId);
     setTenders((prev) =>
-      prev.map((t) => (t.id === tenderId ? { ...t, status, customNotes: notes || t.customNotes } : t))
+      prev.map((t) => (t.id === tenderId ? { ...t, status, customNotes: notes ?? t.customNotes } : t))
     );
     try {
-      await apiFetch(`/api/tenders/${tenderId}/status`, {
-        method: 'POST',
-        body: JSON.stringify({ status, customNotes: notes }),
-      });
-      showToast(`Updated tender stage to "${status}".`);
+      await saveUserTenderState(currentUser.uid, tenderId, status, notes ?? previous?.customNotes);
+      showToast(`Saved your tender stage: "${status}".`);
     } catch (err) {
-      // Local state is already updated
+      setTenders((prev) =>
+        prev.map((t) => t.id === tenderId && previous
+          ? { ...t, status: previous.status, customNotes: previous.customNotes }
+          : t)
+      );
+      showToast('Could not save this stage. Check your Firestore rules and connection.');
+      console.warn('Tender stage save failed:', err);
     }
   };
 
   // Navigation handlers
   const handleSelectForFeasibility = (tender: Tender) => {
+    if (selectedTender?.id !== tender.id) setActiveCalculation(null);
     setSelectedTender(tender);
     setActiveTab('feasibility');
   };
 
   const handleSelectForCosting = (tender: Tender) => {
+    if (selectedTender?.id !== tender.id) setActiveCalculation(null);
     setSelectedTender(tender);
     setActiveTab('costing');
   };
 
   const handleSelectForProposal = (tender: Tender) => {
+    if (selectedTender?.id !== tender.id) setActiveCalculation(null);
     setSelectedTender(tender);
     setActiveTab('proposal');
   };
@@ -273,27 +316,8 @@ export default function App() {
     );
   };
 
-  // If activeCalculation is null, compute a default for the selected tender
-  const currentCalc =
-    activeCalculation || {
-      directMaterialsCost: 777065,
-      directLaborCost: 1238000,
-      transportLogisticsCost: 215900,
-      equipmentMachineryCost: 215900,
-      preliminariesOverheadCost: 88400,
-      contingencyBufferCost: 81400,
-      baseCost: 2400765,
-      marginPercent: 12.5,
-      marginAmount: 300095,
-      taxPercent: 18.0,
-      taxAmount: 486155,
-      totalBidAmount: 3187015,
-      varianceAgainstTenderBudgetPercent: -34.3,
-      winProbability: 82,
-      strategyType: 'Balanced (Optimal)',
-      totalManDays: 38600,
-      workerCount: 121,
-    };
+  // A proposal is available only after the user has calculated and reviewed a BOQ.
+  const currentCalc = activeCalculation;
 
   const goLogin = () => navigateTo('login');
   const goRegister = () => navigateTo('register');
@@ -385,6 +409,7 @@ export default function App() {
             onSelectTender={(tenderId) => {
               const t = tenders.find((item) => item.id === tenderId);
               if (t) {
+                if (selectedTender?.id !== t.id) setActiveCalculation(null);
                 setSelectedTender(t);
                 setActiveTab('costing');
               } else {
@@ -403,6 +428,7 @@ export default function App() {
             unreadCount={notifications.filter((n) => !n.read).length}
             onNavigate={setActiveTab}
             onOpenTender={(t) => {
+              if (selectedTender?.id !== t.id) setActiveCalculation(null);
               setSelectedTender(t);
               setActiveTab('feasibility');
             }}
@@ -453,14 +479,15 @@ export default function App() {
             currency={currency}
             onUpdateTenderStatus={handleUpdateTenderStatus}
             onSelectTender={(t) => {
+              if (selectedTender?.id !== t.id) setActiveCalculation(null);
               setSelectedTender(t);
               setActiveTab('costing');
             }}
           />
         )}
 
-        {activeTab === 'proposal' &&
-          (selectedTender ? (
+        {activeTab === 'proposal' && (
+          selectedTender && currentCalc ? (
             <ProposalGenerator
               tender={selectedTender}
               calculation={currentCalc}
@@ -472,7 +499,22 @@ export default function App() {
                 setActiveTab('pipeline');
               }}
             />
-          ) : emptyState)}
+          ) : (
+            <div className="p-8 rounded-3xl bg-white border border-stone-200 text-center">
+              <p className="text-sm text-stone-600">
+                {selectedTender
+                  ? 'Run and review the BOQ costing first. TenDo will not create a proposal from placeholder financial figures.'
+                  : 'Select a tender first, then complete its BOQ costing before drafting a proposal.'}
+              </p>
+              <button
+                onClick={() => setActiveTab(selectedTender ? 'costing' : 'tenders')}
+                className="mt-4 h-10 px-5 rounded-xl bg-[#4d6b2f] text-white text-sm font-bold"
+              >
+                {selectedTender ? 'Open BOQ Costing' : 'Find tenders'}
+              </button>
+            </div>
+          )
+        )}
 
         {activeTab === 'commodities' && (
           <CommodityTracker
@@ -502,9 +544,22 @@ export default function App() {
         onClose={() => setShowProfileModal(false)}
         profile={companyProfile}
         currency={currency}
-        onSaveProfile={(updated) => {
-          setCompanyProfile((prev) => ({ ...prev, ...updated }));
-          showToast('Company profile updated.');
+        onSaveProfile={async (updated) => {
+          if (!currentUser?.uid) {
+            showToast('Sign in to save your company profile.');
+            return;
+          }
+          const previous = companyProfile;
+          const next = { ...companyProfile, ...updated };
+          setCompanyProfile(next);
+          try {
+            await saveCompanyProfile(currentUser.uid, next);
+            showToast('Company profile saved to your private account.');
+          } catch (err) {
+            setCompanyProfile(previous);
+            showToast('Profile save failed. Check your Firestore rules and connection.');
+            console.warn('Company profile save failed:', err);
+          }
         }}
       />
 
@@ -519,6 +574,7 @@ export default function App() {
         onSelectTenderById={(id) => {
           const t = tenders.find((item) => item.id === id);
           if (t) {
+            if (selectedTender?.id !== t.id) setActiveCalculation(null);
             setSelectedTender(t);
             setActiveTab('costing');
           }

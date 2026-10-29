@@ -19,79 +19,30 @@ class PortalWebSocketService {
   private state: PortalConnectionState = {
     connected: false,
     status: 'disconnected',
-    latencyMs: 24,
+    latencyMs: 0,
     lastPing: null,
-    activePortals: [
-      {
-        portal: 'CPPP',
-        name: 'Central Public Procurement Portal',
-        domain: 'eprocure.gov.in',
-        status: 'online',
-        tendersToday: 148,
-        lastPolled: new Date().toISOString(),
-        responseTimeMs: 24,
-        totalActiveBids: 12480,
-      },
-      {
-        portal: 'GeM',
-        name: 'Government e-Marketplace',
-        domain: 'gem.gov.in',
-        status: 'online',
-        tendersToday: 226,
-        lastPolled: new Date().toISOString(),
-        responseTimeMs: 28,
-        totalActiveBids: 18920,
-      },
-      {
-        portal: 'NHAI',
-        name: 'National Highways Authority of India',
-        domain: 'nhai.gov.in',
-        status: 'online',
-        tendersToday: 42,
-        lastPolled: new Date().toISOString(),
-        responseTimeMs: 35,
-        totalActiveBids: 3410,
-      },
-      {
-        portal: 'IREPS',
-        name: 'Indian Railways E-Procurement System',
-        domain: 'ireps.gov.in',
-        status: 'online',
-        tendersToday: 68,
-        lastPolled: new Date().toISOString(),
-        responseTimeMs: 31,
-        totalActiveBids: 5620,
-      },
-      {
-        portal: 'State PWD',
-        name: 'State Public Works Departments',
-        domain: 'pwd.gov.in',
-        status: 'online',
-        tendersToday: 91,
-        lastPolled: new Date().toISOString(),
-        responseTimeMs: 34,
-        totalActiveBids: 8140,
-      },
-      {
-        portal: 'SECI',
-        name: 'Solar Energy Corporation of India',
-        domain: 'seci.co.in',
-        status: 'online',
-        tendersToday: 22,
-        lastPolled: new Date().toISOString(),
-        responseTimeMs: 40,
-        totalActiveBids: 1240,
-      },
-    ],
-    connectedClientsCount: 1,
+    activePortals: [],
+    connectedClientsCount: 0,
     totalEventsReceived: 0,
-    lastEventTime: new Date().toISOString(),
+    lastEventTime: '',
   };
 
   // Recent received event IDs to prevent duplicate processing (Idempotency requirement)
   private processedEventIds = new Set<string>();
 
   public connect(): void {
+    // There is no production portal WebSocket endpoint configured by default.
+    // Enable this only when deploying the dedicated WebSocket service.
+    if (import.meta.env.VITE_PORTAL_WEBSOCKET_ENABLED !== 'true') {
+      this.updateState({
+        connected: false,
+        status: 'disconnected',
+        activePortals: [],
+        connectedClientsCount: 0,
+      });
+      return;
+    }
+
     if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
       return;
     }
@@ -148,8 +99,8 @@ class PortalWebSocketService {
       this.updateState({
         connected: true,
         status: 'connected',
-        activePortals: data.activePortals || this.state.activePortals,
-        connectedClientsCount: data.connectedClientsCount || 1,
+        activePortals: data.activePortals ?? this.state.activePortals,
+        connectedClientsCount: data.connectedClientsCount ?? 0,
       });
 
       // Dispatch initial recent events if any
@@ -186,9 +137,12 @@ class PortalWebSocketService {
     } else if (msg.type === 'portal:status') {
       const data = msg.data || {};
       this.updateState({
-        connectedClientsCount: data.connectedClientsCount || this.state.connectedClientsCount,
+        connectedClientsCount: data.connectedClientsCount ?? this.state.connectedClientsCount,
         activePortals: data.activePortals || this.state.activePortals,
       });
+    } else if (msg.type === 'portal:scan_unavailable') {
+      this.updateState({ connected: true, status: 'error', activePortals: [] });
+      console.info(msg.message || 'No verified live source connector is configured.');
     } else if (msg.type === 'server:pong') {
       if (msg.clientTimestamp) {
         const roundtrip = Math.max(8, Date.now() - msg.clientTimestamp);

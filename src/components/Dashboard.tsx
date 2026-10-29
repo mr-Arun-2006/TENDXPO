@@ -34,7 +34,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, tenders, unreadCount
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
   const { open, closingSoon, inProgress } = useMemo(() => {
-    const withDays = tenders.map((t) => ({ t, d: daysLeft(t.submissionDeadline) }));
+    // Sample tenders must not drive deadline alerts or personal bid counts.
+    const usableTenders = tenders.filter((t) => t.dataSource !== 'sample');
+    const withDays = usableTenders.map((t) => ({ t, d: daysLeft(t.submissionDeadline) }));
     const openList = withDays.filter((x) => x.d === null || x.d >= 0);
     return {
       open: openList.length,
@@ -42,7 +44,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, tenders, unreadCount
         .filter((x) => x.d !== null && x.d <= 7)
         .sort((a, b) => (a.d as number) - (b.d as number))
         .slice(0, 5),
-      inProgress: tenders.filter((t) => t.status !== 'Discovered' && t.status !== 'Won' && t.status !== 'Lost').length,
+      inProgress: usableTenders.filter((t) => t.status !== 'Discovered' && t.status !== 'Won' && t.status !== 'Lost').length,
     };
   }, [tenders]);
 

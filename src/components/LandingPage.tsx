@@ -260,7 +260,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     <p className="text-[10px] text-stone-400 uppercase font-bold">Estimated NIT Value</p>
                     <p className="text-base font-black font-mono text-stone-900">{formattedBudget}</p>
                     {tender.companyFitScore > 0 && (
-                      <p className="text-[10px] font-bold text-[#3f5724]">{tender.companyFitScore}% fit (sample score)</p>
+                      <p className="text-[10px] font-bold text-stone-500">Sample record · not analyzed</p>
                     )}
                   </div>
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { CompanyProfile, CurrencyType, SupportedLanguage } from '../types';
 import { formatCurrency } from '../utils/formatters';
 import { useTranslation } from '../context/LanguageContext';
@@ -33,8 +33,6 @@ export const CompanyProfileModal: React.FC<CompanyProfileModalProps> = ({
   currency,
   onSaveProfile,
 }) => {
-  if (!isOpen) return null;
-
   const { language, setLanguage, t, supportedLanguages } = useTranslation();
   const [activeSettingsTab, setActiveSettingsTab] = useState<'profile' | 'pwa'>('profile');
 
@@ -60,6 +58,24 @@ export const CompanyProfileModal: React.FC<CompanyProfileModalProps> = ({
   ];
 
   const firstLetter = name?.trim()?.charAt(0)?.toUpperCase() || 'A';
+  useEffect(() => {
+    if (!isOpen) return;
+    setName(profile.name || '');
+    setPhotoUrl(profile.profilePhoto || '');
+    setTurnover(profile.annualTurnover || 0);
+    setSolvency(profile.availableSolvency || 0);
+    setActiveProjects(profile.activeProjectsCount || 0);
+    setMaxCapacity(profile.maxProjectCapacity || 0);
+    setUtilization(profile.currentCapacityUtilizationPercent || 0);
+    setPastRating(profile.pastPerformanceRating || 0);
+    setSkilledCount(profile.skilledWorkforceCount || 0);
+    setUnskilledCount(profile.unskilledWorkforceCount || 0);
+    setMachineryCount(profile.heavyMachineryCount || 0);
+    setTargetMargin(profile.targetMarginPercent || 10);
+  }, [isOpen, profile]);
+
+  if (!isOpen) return null;
+
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
