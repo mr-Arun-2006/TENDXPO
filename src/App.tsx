@@ -119,13 +119,25 @@ export default function App() {
       const res = await fetch(refresh ? '/api/tenders?refresh=1' : '/api/tenders');
       const data = await res.json();
       if (data.status === 'success' && data.tenders) {
-        // Keep tenders the user entered by hand; everything else comes from the server.
+        let fetchedTenders: Tender[] = data.tenders;
+        if (currentUser?.uid) {
+          try {
+            const savedStates = await getUserTenderStates(currentUser.uid);
+            fetchedTenders = fetchedTenders.map((t) => {
+              const saved = savedStates[t.id];
+              return saved ? { ...t, status: saved.status, customNotes: saved.customNotes ?? t.customNotes } : t;
+            });
+          } catch (err) {
+            console.warn('Could not merge saved tender stages into refreshed data:', err);
+          }
+        }
+        // Preserve user-entered notices, and never write the user's workflow onto the shared source notice.
         setTenders((prev) => [
-          ...data.tenders,
-          ...prev.filter((t) => t.dataSource === 'user' && !data.tenders.some((x: Tender) => x.id === t.id)),
+          ...fetchedTenders,
+          ...prev.filter((t) => t.dataSource === 'user' && !fetchedTenders.some((x) => x.id === t.id)),
         ]);
-        if (!selectedTender && data.tenders.length > 0) {
-          setSelectedTender(data.tenders[0]);
+        if (!selectedTender && fetchedTenders.length > 0) {
+          setSelectedTender(fetchedTenders[0]);
         }
       }
     } catch (err) {
