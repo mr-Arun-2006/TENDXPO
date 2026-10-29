@@ -1,7 +1,7 @@
 import { apiJson } from '../services/api';
 import React, { useState } from 'react';
 import { CompanyProfile, CurrencyType, FeasibilityResult, Tender } from '../types';
-import { formatCurrency, formatTenderValue, getFitScoreColor } from '../utils/formatters';
+import { formatTenderValue, getFitScoreColor } from '../utils/formatters';
 import {
   ShieldCheck,
   AlertTriangle,
