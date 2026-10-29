@@ -253,7 +253,7 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
       <div className="p-6 rounded-3xl bg-white border border-stone-200 shadow-xs space-y-4">
         <h3 className="font-black text-stone-900 text-base flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-[#4d6b2f]" />
-          <span>Pre-Qualification & Mandatory Criteria Matrix (Govt. of India e-Procurement)</span>
+          <span>Pre-Qualification & Mandatory Criteria Matrix</span>
         </h3>
 
         <div className="overflow-x-auto rounded-2xl border border-stone-200">
@@ -306,7 +306,7 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
             <span>Evidence-backed Strengths</span>
           </h4>
           <ul className="space-y-2 text-xs text-stone-600">
-            {(aiAuditResult?.strengths || ['Run the feasibility audit to list strengths supported by the available tender and company evidence.'])]).map((s, i) => (
+            {(aiAuditResult?.strengths || ['Run the feasibility audit to list strengths supported by the available tender and company evidence.']).map((s, i) => (
               <li key={i} className="flex items-start gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#4d6b2f] shrink-0 mt-1.5"></span>
                 <span>{s}</span>
@@ -321,7 +321,7 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
             <span>Risks & Missing Evidence</span>
           </h4>
           <ul className="space-y-2 text-xs text-stone-600">
-            {(aiAuditResult?.riskFactors || ['Run the feasibility audit to identify tender-specific risks and missing evidence. Verify material prices with current supplier quotations.'])]).map((r, i) => (
+            {(aiAuditResult?.riskFactors || ['Run the feasibility audit to identify tender-specific risks and missing evidence. Verify material prices with current supplier quotations.']).map((r, i) => (
               <li key={i} className="flex items-start gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 mt-1.5"></span>
                 <span>{r}</span>
