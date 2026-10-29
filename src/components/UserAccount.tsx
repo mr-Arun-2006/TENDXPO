@@ -110,7 +110,7 @@ export const UserAccount: React.FC<UserAccountProps> = ({
     );
   };
 
-  // Save Sector Profile to Firestore & Server
+  // Save sector profile to the signed-in user's Firestore namespace
   const handleSaveSectorProfile = async () => {
     setIsSavingProfile(true);
     const uid = currentUser?.uid || '';
