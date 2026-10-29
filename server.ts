@@ -760,7 +760,7 @@ app.get('/api/portals', (_req, res) => {
     status: 'success',
     portals: OFFICIAL_PORTALS,
     sourceOfTruth: '/api/sources',
-    countMeaning: 'activeTenderCount is not a live portal count; use /api/tenders and inspect each record dataSource.',
+    countMeaning: 'activeTenderCount counts verified records held in the live portal monitor; sampleTenderCount is a separate demo count.',
     liveSourceIds: SOURCE_REGISTRY.filter((source) => source.access === 'live-api').map((source) => source.id),
     activeTenderCount: 0,
     sampleTenderCount: activeTenders.length,
@@ -1067,7 +1067,7 @@ const pickLang = (v: any): string => {
 
 function classifyTedSector(notice: any): string {
   const raw = JSON.stringify(notice?.['classification-cpv'] ?? '');
-  const codes = Array.from(raw.matchAll(/\\b(\\d{8})\\b/g), (match) => match[1]);
+  const codes = Array.from(raw.matchAll(/\b(\d{8})\b/g, (match) => match[1]);
   if (codes.some((code) => code.startsWith('4523'))) return 'Roads & Highways';
   if (codes.some((code) => code.startsWith('45'))) return 'Civil Construction';
   if (codes.some((code) => code.startsWith('33'))) return 'Healthcare & MedTech';
