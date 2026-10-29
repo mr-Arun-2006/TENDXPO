@@ -25,7 +25,7 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { TenderAlert, UserSectorProfile } from '../types';
+import { CompanyProfile, TenderAlert, TenderStatus, UserSectorProfile } from '../types';
 
 // ---------------------------------------------------------------------------
 // App / Auth / Firestore initialisation
@@ -312,6 +312,78 @@ export const sendPasswordReset = async (email: string): Promise<void> => {
 export const logout = async () => {
   await signOut(auth);
   cachedAccessToken = null;
+};
+
+// ---------------------------------------------------------------------------
+// Firestore: private company profile and personal tender pipeline state
+// ---------------------------------------------------------------------------
+
+export interface SavedTenderState {
+  tenderId: string;
+  userId: string;
+  status: TenderStatus;
+  customNotes?: string;
+  updatedAt: string;
+}
+
+export const getCompanyProfile = async (userId: string): Promise<CompanyProfile | null> => {
+  const path = `users/${userId}/company_profile/default`;
+  if (auth.currentUser?.uid !== userId) throw new Error('You can only read your own company profile.');
+  try {
+    const snap = await getDoc(doc(db, 'users', userId, 'company_profile', 'default'));
+    if (!snap.exists()) return null;
+    const data = snap.data();
+    const { userId: _owner, updatedAt: _updatedAt, ...profile } = data;
+    return profile as CompanyProfile;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.GET, path);
+  }
+};
+
+export const saveCompanyProfile = async (userId: string, profile: CompanyProfile): Promise<void> => {
+  const path = `users/${userId}/company_profile/default`;
+  if (auth.currentUser?.uid !== userId) throw new Error('You can only save your own company profile.');
+  try {
+    await setDoc(doc(db, 'users', userId, 'company_profile', 'default'), {
+      ...profile,
+      userId,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, path);
+  }
+};
+
+export const getUserTenderStates = async (userId: string): Promise<Record<string, SavedTenderState>> => {
+  const path = `users/${userId}/tender_states`;
+  if (auth.currentUser?.uid !== userId) throw new Error('You can only read your own tender pipeline.');
+  try {
+    const snap = await getDocs(collection(db, 'users', userId, 'tender_states'));
+    const states: Record<string, SavedTenderState> = {};
+    snap.forEach((d) => {
+      states[d.id] = { tenderId: d.id, ...(d.data() as Omit<SavedTenderState, 'tenderId'>) };
+    });
+    return states;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.LIST, path);
+  }
+};
+
+export const saveUserTenderState = async (
+  userId: string,
+  tenderId: string,
+  status: TenderStatus,
+  customNotes?: string
+): Promise<void> => {
+  const path = `users/${userId}/tender_states/${tenderId}`;
+  if (auth.currentUser?.uid !== userId) throw new Error('You can only change your own tender pipeline.');
+  try {
+    const data: SavedTenderState = { userId, tenderId, status, updatedAt: new Date().toISOString() };
+    if (typeof customNotes === 'string') data.customNotes = customNotes;
+    await setDoc(doc(db, 'users', userId, 'tender_states', tenderId), data);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, path);
+  }
 };
 
 // ---------------------------------------------------------------------------
