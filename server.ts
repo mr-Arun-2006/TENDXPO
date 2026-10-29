@@ -586,6 +586,29 @@ const RECENT_PORTAL_EVENTS: PortalLiveEventData[] = [];
 
 // Synthetic portal tender generation is intentionally removed. Add a source adapter before publishing scan results.
 
+// Connection bookkeeping only; an open socket does not mean an official portal is connected.
+const wsClients = new Set<WebSocket>();
+
+function broadcastPortalStatus(): void {
+  const message = JSON.stringify({
+    type: 'portal:status',
+    data: {
+      connectedClientsCount: wsClients.size,
+      activePortals: [],
+      liveSourceIds: SOURCE_REGISTRY.filter((source) => source.access === 'live-api').map((source) => source.id),
+    },
+  });
+  for (const client of wsClients) {
+    if (client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(message);
+      } catch (err) {
+        console.warn('Could not broadcast WebSocket status:', err);
+      }
+    }
+  }
+}
+
 // Initialize WebSocketServer mounted on /ws/portals
 const wss = new WebSocketServer({ noServer: true });
 
@@ -614,10 +637,10 @@ wss.on('connection', (ws: WebSocket) => {
         activePortals: PORTAL_MONITOR_HEALTH,
         connectedClientsCount: wsClients.size,
         recentEvents: [],
-        currentCommodities: COMMODITY_INDEX,
+        commodityDataSource: 'illustrative-sample-rates',
         activeTendersCount: 0,
         sampleTenderCount: activeTenders.length,
-        protocol: 'TenDo Real-Time Official Portals Stream v2.1',
+        protocol: 'TenDo WebSocket Status Stream v2.1 (live portal feeds not configured)',
       },
     })
   );
