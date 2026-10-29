@@ -202,7 +202,7 @@ export const CostEstimationEngine: React.FC<CostEstimationEngineProps> = ({
             <h2 className="text-xl font-black text-stone-900 tracking-tight">{tender.title}</h2>
             <p className="text-xs text-stone-500 mt-1">
               Authority: <strong className="text-stone-800">{tender.authority}</strong> | Official NIT
-              Budget:{' '}
+              Estimated Tender Value (verify the original source):{' '}
               <strong className="text-[#3f5724] text-sm font-mono font-black">
                 {formatCurrency(tender.budget, 'INR')}
               </strong>
@@ -276,7 +276,7 @@ export const CostEstimationEngine: React.FC<CostEstimationEngineProps> = ({
                   <span>Itemized Bill of Quantities (BOQ) & Raw Materials</span>
                 </h3>
                 <p className="text-xs text-stone-500">
-                  Real-time Indian market unit rates for Fe550 Steel, M-Sand, 53-Grade Cement, Paints & RMC
+                  Editable template rates only; replace assumptions with verified local quotations before bidding.
                 </p>
               </div>
 
@@ -512,7 +512,7 @@ export const CostEstimationEngine: React.FC<CostEstimationEngineProps> = ({
                     : 'bg-stone-50 border-stone-200 text-stone-600 hover:text-stone-900'
                 }`}
               >
-                <div className="text-[11px] font-bold">Aggressive L1</div>
+                <div className="text-[11px] font-bold">Lower Margin</div>
                 <div className="text-xs mt-1 font-mono">7% Margin</div>
                 <div className="text-[10px] text-stone-500 font-semibold mt-0.5">No win odds estimated</div>
               </button>
@@ -525,7 +525,7 @@ export const CostEstimationEngine: React.FC<CostEstimationEngineProps> = ({
                     : 'bg-stone-50 border-stone-200 text-stone-600 hover:text-stone-900'
                 }`}
               >
-                <div className="text-[11px] font-bold">Optimal Sweet-Spot</div>
+                <div className="text-[11px] font-bold">Target Margin</div>
                 <div className="text-xs mt-1 font-mono">12.5% Margin</div>
                 <div className="text-[10px] text-stone-200 font-medium mt-0.5">No win odds estimated</div>
               </button>
@@ -538,7 +538,7 @@ export const CostEstimationEngine: React.FC<CostEstimationEngineProps> = ({
                     : 'bg-stone-50 border-stone-200 text-stone-600 hover:text-stone-900'
                 }`}
               >
-                <div className="text-[11px] font-bold">Defensive Buffer</div>
+                <div className="text-[11px] font-bold">Higher Margin</div>
                 <div className="text-xs mt-1 font-mono">18% Margin</div>
                 <div className="text-[10px] text-stone-500 mt-0.5">No win odds estimated</div>
               </button>
@@ -601,7 +601,7 @@ export const CostEstimationEngine: React.FC<CostEstimationEngineProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-stone-200">
               <h3 className="font-black text-stone-900 text-base">Comprehensive Tender Budget Ask</h3>
               <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-[#4d6b2f]/10 text-[#3f5724]">
-                Audited INR
+                Draft estimate · INR
               </span>
             </div>
 
@@ -638,14 +638,14 @@ export const CostEstimationEngine: React.FC<CostEstimationEngineProps> = ({
               </div>
 
               <div className="flex justify-between text-stone-600">
-                <span>Statutory GST ({taxPercent}%):</span>
+                <span>Tax assumption ({taxPercent}%):</span>
                 <span className="font-mono font-bold text-stone-800">+{formatCurrency(taxAmount, 'INR')}</span>
               </div>
 
               {/* Total Bid Amount Highlight in Olive Green theme */}
               <div className="pt-3 border-t-2 border-[#4d6b2f]/30 p-4 rounded-2xl bg-[#4d6b2f]/10 border border-[#4d6b2f]/30">
                 <span className="text-[11px] text-[#3f5724] uppercase tracking-wider block font-bold">
-                  Final Competitive Tender Bid Price (INR)
+                  Calculated Bid Estimate (INR)
                 </span>
                 <span className="text-2xl font-black text-stone-900 font-mono block mt-1">
                   {formatCurrency(totalBidAmount, 'INR')}
@@ -683,7 +683,7 @@ export const CostEstimationEngine: React.FC<CostEstimationEngineProps> = ({
               className="w-full py-3.5 rounded-2xl bg-[#4d6b2f] hover:bg-[#3f5724] text-white font-bold text-sm shadow-md transition active:scale-98 flex items-center justify-center gap-2"
             >
               <FileCheck className="w-4 h-4" />
-              <span>Generate Official Proposal Document</span>
+              <span>Draft Proposal for Review</span>
             </button>
           </div>
         </div>
