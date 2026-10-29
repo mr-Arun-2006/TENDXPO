@@ -217,7 +217,7 @@ export const UserAccount: React.FC<UserAccountProps> = ({
           }`}
         >
           <Bell className="w-4 h-4 text-[#4d6b2f]" />
-          <span>Dispatched Alerts History ({userAlerts.length})</span>
+          <span>Alert History ({userAlerts.length})</span>
         </button>
 
         <button
@@ -233,10 +233,10 @@ export const UserAccount: React.FC<UserAccountProps> = ({
         </button>
       </div>
 
-      {/* Tab 1: Sector Profile & Cloud Function Trigger (Main User Request) */}
+      {/* Tab 1: Sector profile and alert preferences */}
       {activeSubTab === 'sector_alerts' && (
         <div className="space-y-6">
-          {/* Cloud Function Scraper Action Banner */}
+          {/* Source connector status */}
           <div className="p-6 rounded-3xl bg-linear-to-r from-stone-900 to-stone-800 text-white shadow-md space-y-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="space-y-1">
@@ -260,7 +260,7 @@ export const UserAccount: React.FC<UserAccountProps> = ({
               </button>
             </div>
 
-            {/* Cloud Function Execution Trace Box */}
+            {/* Connector status details */}
             {cloudFunctionLogs.length > 0 && (
               <div className="p-4 rounded-2xl bg-stone-950/80 border border-stone-700/60 font-mono text-xs space-y-1.5 text-stone-300">
                 <p className="text-[11px] font-bold text-[#86a95f] uppercase tracking-wider flex items-center gap-1.5">
@@ -495,7 +495,7 @@ export const UserAccount: React.FC<UserAccountProps> = ({
         <div className="p-6 rounded-3xl bg-white border border-stone-200 shadow-2xs space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-base font-black text-stone-900">Dispatched Tender Notifications</h3>
+              <h3 className="text-base font-black text-stone-900">Saved Tender Alerts</h3>
               <p className="text-xs text-stone-500">
                 Alerts recorded for your account. Automatic alert creation is not enabled until verified feeds and delivery services are configured.
               </p>
