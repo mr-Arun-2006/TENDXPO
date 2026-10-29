@@ -28,3 +28,13 @@ Project: `tenderxpo`
 
 ## 4. API security
 Protected routes require `Authorization: Bearer <Firebase ID token>`. The server verifies the token against Google's public keys, so no service account is needed.
+
+## 5. Deploy on Vercel
+`vercel.json` and `api/index.ts` run the Express server as a Vercel function; the built app (`dist`) is served as static files.
+
+1. Import the repo in Vercel (framework preset: **Other**). The build command is already `npm run build`.
+2. **Settings > Environment Variables**: add `GEMINI_API_KEY` (and optionally `GEMINI_MODEL`).
+3. In the Firebase console, add your Vercel domain (for example `tenderxpo.vercel.app`) under **Authentication > Settings > Authorized domains**.
+4. Redeploy after changing environment variables.
+
+Limits on Vercel: the live WebSocket feed is not available, and in-memory data (alert rules saved on the server, tender status changes) resets when a function instance restarts. Firestore data persists.
