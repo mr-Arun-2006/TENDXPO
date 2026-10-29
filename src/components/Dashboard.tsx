@@ -31,7 +31,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, tenders, unreadCount
     // Sample tenders must not drive deadline alerts or personal bid counts.
     const usableTenders = tenders.filter((t) => t.dataSource !== 'sample');
     const withDays = usableTenders.map((t) => ({ t, d: daysLeft(t.submissionDeadline) }));
-    const openList = withDays.filter((x) => x.d === null || x.d >= 0);
+    const openList = withDays.filter((x) => x.d !== null && x.d >= 0);
     return {
       open: openList.length,
       closingSoon: openList
