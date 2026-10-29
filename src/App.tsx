@@ -21,8 +21,7 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { GoogleChatModal } from './components/GoogleChatModal';
 import { usePortalWebSocket } from './hooks/usePortalWebSocket';
 import { User } from 'firebase/auth';
-import { initAuth, logout } from './services/firebase';
-import { apiFetch } from './services/api';
+import { getCompanyProfile, getUserTenderStates, initAuth, logout, saveCompanyProfile, saveUserTenderState } from './services/firebase';
 
 const APP_TABS = ['dashboard','tenders','assistant','pipeline','feasibility','costing','proposal','commodities','sources','account'];
 
@@ -147,23 +146,9 @@ export default function App() {
     }
   };
 
-  // Fetch company profile
-  const fetchProfile = async () => {
-    try {
-      const res = await fetch('/api/company-profile');
-      const data = await res.json();
-      if (data.status === 'success' && data.profile) {
-        setCompanyProfile(data.profile);
-      }
-    } catch (err) {
-      console.warn('Profile fetch error:', err);
-    }
-  };
-
   useEffect(() => {
     fetchTenders();
     fetchCommodities();
-    fetchProfile();
 
     // Listen to Firebase Auth state
     const unsubscribe = initAuth(
@@ -182,6 +167,40 @@ export default function App() {
       if (unsubscribe) unsubscribe();
     };
   }, []);
+
+  // Load profile only after Firebase identifies the signed-in user.
+  useEffect(() => {
+    let cancelled = false;
+    if (!currentUser?.uid) {
+      setCompanyProfile(DEFAULT_COMPANY_PROFILE);
+      return () => { cancelled = true; };
+    }
+    getCompanyProfile(currentUser.uid)
+      .then((profile) => {
+        if (!cancelled) setCompanyProfile(profile || DEFAULT_COMPANY_PROFILE);
+      })
+      .catch((err) => {
+        console.warn('Company profile could not be loaded:', err);
+        if (!cancelled) showToast('Company profile could not be loaded. Check your Firestore rules and connection.');
+      });
+    return () => { cancelled = true; };
+  }, [currentUser?.uid]);
+
+  // Restore personal pipeline states without modifying the shared official notice.
+  useEffect(() => {
+    if (!currentUser?.uid || tenders.length === 0) return;
+    let cancelled = false;
+    getUserTenderStates(currentUser.uid)
+      .then((states) => {
+        if (cancelled) return;
+        setTenders((prev) => prev.map((t) => {
+          const saved = states[t.id];
+          return saved ? { ...t, status: saved.status, customNotes: saved.customNotes ?? t.customNotes } : t;
+        }));
+      })
+      .catch((err) => console.warn('Tender pipeline states could not be restored:', err));
+    return () => { cancelled = true; };
+  }, [currentUser?.uid, tenders.length]);
 
   // Keep route in sync with the URL hash (back/forward buttons work).
   useEffect(() => {
@@ -223,19 +242,27 @@ export default function App() {
     showToast(`Added tender "${fullTender.title.slice(0, 30)}..." to pipeline.`);
   };
 
-  // Update status (e.g., from Kanban or table)
+  // Tender workflow state belongs to the current user, not to the shared tender notice.
   const handleUpdateTenderStatus = async (tenderId: string, status: TenderStatus, notes?: string) => {
+    if (!currentUser?.uid) {
+      showToast('Sign in to save your tender workflow.');
+      return;
+    }
+    const previous = tenders.find((t) => t.id === tenderId);
     setTenders((prev) =>
-      prev.map((t) => (t.id === tenderId ? { ...t, status, customNotes: notes || t.customNotes } : t))
+      prev.map((t) => (t.id === tenderId ? { ...t, status, customNotes: notes ?? t.customNotes } : t))
     );
     try {
-      await apiFetch(`/api/tenders/${tenderId}/status`, {
-        method: 'POST',
-        body: JSON.stringify({ status, customNotes: notes }),
-      });
-      showToast(`Updated tender stage to "${status}".`);
+      await saveUserTenderState(currentUser.uid, tenderId, status, notes ?? previous?.customNotes);
+      showToast(`Saved your tender stage: "${status}".`);
     } catch (err) {
-      // Local state is already updated
+      setTenders((prev) =>
+        prev.map((t) => t.id === tenderId && previous
+          ? { ...t, status: previous.status, customNotes: previous.customNotes }
+          : t)
+      );
+      showToast('Could not save this stage. Check your Firestore rules and connection.');
+      console.warn('Tender stage save failed:', err);
     }
   };
 
@@ -502,9 +529,22 @@ export default function App() {
         onClose={() => setShowProfileModal(false)}
         profile={companyProfile}
         currency={currency}
-        onSaveProfile={(updated) => {
-          setCompanyProfile((prev) => ({ ...prev, ...updated }));
-          showToast('Company profile updated.');
+        onSaveProfile={async (updated) => {
+          if (!currentUser?.uid) {
+            showToast('Sign in to save your company profile.');
+            return;
+          }
+          const previous = companyProfile;
+          const next = { ...companyProfile, ...updated };
+          setCompanyProfile(next);
+          try {
+            await saveCompanyProfile(currentUser.uid, next);
+            showToast('Company profile saved to your private account.');
+          } catch (err) {
+            setCompanyProfile(previous);
+            showToast('Profile save failed. Check your Firestore rules and connection.');
+            console.warn('Company profile save failed:', err);
+          }
         }}
       />
 
