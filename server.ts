@@ -825,7 +825,7 @@ app.post('/api/gemini/analyze-bid', requireAuth, aiRateLimit, async (req, res) =
   if (aiClient) {
     try {
       const prompt = `You are a Principal Government Tender & Bidding Intelligence Auditor.
-Analyze the following official tender opportunity against our corporate capacity:
+Analyze the supplied tender record against the user-provided company profile. Source: ${tender.dataSource || 'unknown'}. Company values are user-reported and not independently verified. Never invent project references, certificates, contracts, market prices, competitor bids, win probabilities, or guaranteed outcomes. Explicitly flag missing evidence. Do not treat sample records as real opportunities:
 
 TENDER SPECIFICATIONS:
 - Title: ${tender.title}
@@ -851,7 +851,7 @@ Provide a comprehensive, highly structured feasibility audit in JSON format with
   "executiveSummary": string (concise assessment of alignment),
   "strengths": string[] (list of 3-4 competitive advantages),
   "riskFactors": string[] (list of 3-4 compliance, pricing or capacity bottlenecks),
-  "strategicWinRecommendations": string[] (actionable steps to secure L1/T1 position),
+  "strategicWinRecommendations": string[] (actions to verify eligibility and prepare a compliant bid; never guarantee an award),
   "bidNoBidChecklist": [
     { "criteria": string, "required": string, "companyValue": string, "passed": boolean }
   ]
@@ -1125,7 +1125,7 @@ Return a structured JSON with:
   if (targetLang === 'hi') {
     return res.json({
       status: 'success',
-      source: 'deterministic_engine',
+      source: 'template',
       data: {
         executiveCoverLetter: `सेवा में: निविदा आमंत्रण प्राधिकारी (TIA)\n${tender.authority}\n\nविषय: "${tender.title}" (संदर्भ: ${tender.refNumber}) हेतु कार्यशील प्रस्ताव मसौदा\n\nमहोदय/महोदया,\n\nयह मसौदा उपलब्ध संरचित निविदा विवरण और दर्ज लागत अनुमानों पर आधारित है। कृपया मूल निविदा, सभी संशोधन, पात्रता, BOQ, कर, समयसीमा और कंपनी के प्रमाणपत्रों की पुष्टि करें। केवल सत्यापित दस्तावेज़ ही अंतिम प्रस्ताव के साथ संलग्न करें।\n\nभवदीय,\n${p.name}`,
         costJustificationNarrative: "कार्यशील मसौदा: मात्रा, इकाइयों, वर्तमान स्थानीय आपूर्तिकर्ता कोटेशन, श्रम दरों, उपकरण और परिवहन लागत, करों तथा जोखिम मान्यताओं की पुष्टि करें। इन दरों को लाइव बाजार मूल्य नहीं माना जाना चाहिए.",
@@ -1138,7 +1138,7 @@ Return a structured JSON with:
 
   res.json({
     status: 'success',
-    source: 'deterministic_engine',
+    source: 'template',
     data: {
       executiveCoverLetter: `To: ${tender.authority}\n\nSubject: Working draft for "${tender.title}" (Reference: ${tender.refNumber})\n\nDear Sir/Madam,\n\nThis is a working draft based on the structured tender fields and BOQ assumptions supplied for analysis. Review the original tender and all amendments, eligibility clauses, quantities, taxes, deadlines and company evidence before finalizing. Attach only verified documents that are actually available.\n\nRespectfully,\n${p.name}`,
       costJustificationNarrative: "Working draft: verify quantities, units, current written supplier quotations, labor rates, equipment ownership or rental, transport, taxes and risk assumptions. These figures are not verified live market quotations.",
