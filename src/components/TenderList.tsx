@@ -231,7 +231,8 @@ export const TenderList: React.FC<TenderListProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {filteredTenders.map((tender) => {
           const time = getTimeRemaining(tender.submissionDeadline);
-          const fit = getFitScoreColor(tender.companyFitScore);
+          const hasFitScore = tender.companyFitScore > 0;
+          const fit = getFitScoreColor(hasFitScore ? tender.companyFitScore : 0);
 
           return (
             <div
@@ -273,11 +274,11 @@ export const TenderList: React.FC<TenderListProps> = ({
 
                   {/* Fit Score Badge */}
                   <div
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold border ${fit.bg} ${fit.border} ${fit.text}`}
-                    title="Computed company eligibility and past performance fit score"
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold border ${hasFitScore ? fit.bg + ' ' + fit.border + ' ' + fit.text : 'bg-stone-100 border-stone-200 text-stone-600'}`}
+                    title={hasFitScore ? "Fit score from the latest analysis in this session" : "Run an analysis to calculate a fit score"}
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>{tender.companyFitScore}% Match</span>
+                    <span>{hasFitScore ? `${tender.companyFitScore}% Match` : 'Not analyzed'}</span>
                   </div>
                 </div>
 
