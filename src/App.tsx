@@ -80,14 +80,14 @@ export default function App() {
           if (prev.some((t) => t.id === latest.tenderData!.id || t.refNumber === latest.tenderData!.refNumber)) {
             return prev;
           }
-          return [{ ...latest.tenderData!, dataSource: 'sample' as const }, ...prev];
+          return [{ ...latest.tenderData!, dataSource: latest.tenderData!.dataSource || 'sample' }, ...prev];
         });
 
         const notif: PortalNotification = {
           id: `notif-${latest.id}`,
           timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
           type: 'New Tender',
-          title: `[Simulated feed] ${latest.portal}: new tender`,
+          title: latest.tenderData.dataSource === 'sample' ? `[Sample feed] ${latest.portal}: new tender` : `${latest.portal}: new tender`,
           message: `${latest.title} (₹${((latest.budget || 0) / 10000000).toFixed(2)} Cr)`,
           tenderId: latest.tenderData.id,
           severity: 'success',
@@ -231,7 +231,7 @@ export default function App() {
     setIsScraping(true);
     await fetchTenders(true);
     setIsScraping(false);
-    showToast('Tender feed refreshed from official sources.');
+    showToast('Tender feed reloaded. Only configured sources provide live records; sample records are labelled.');
   };
 
   // User adds custom tender
