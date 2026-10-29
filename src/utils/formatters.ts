@@ -16,6 +16,21 @@ export function formatCurrency(amount: number, _currency: CurrencyType = 'INR'):
   return `₹${Math.round(inrValue).toLocaleString('en-IN')}`;
 }
 
+/** Format a tender or company value in the currency supplied by its source; never infer FX rates. */
+export function formatTenderValue(amount: number, currency: CurrencyType = 'INR'): string {
+  if (!Number.isFinite(amount) || amount <= 0) return 'Value not stated';
+  if (currency === 'INR') {
+    if (amount >= 10_000_000) return `₹${(amount / 10_000_000).toFixed(2)} Cr`;
+    if (amount >= 100_000) return `₹${(amount / 100_000).toFixed(2)} Lakh`;
+    return `₹${Math.round(amount).toLocaleString('en-IN')}`;
+  }
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
 export function formatRawAmount(amount: number, _currency: CurrencyType = 'INR'): string {
   if (isNaN(amount)) return '₹0';
   // If unit rate is under 5000, convert to realistic INR market rate if needed
@@ -24,7 +39,14 @@ export function formatRawAmount(amount: number, _currency: CurrencyType = 'INR')
 }
 
 export function getTimeRemaining(deadlineIso: string): { text: string; isUrgent: boolean; isExpired: boolean } {
-  const diff = new Date(deadlineIso).getTime() - Date.now();
+  if (!deadlineIso || !deadlineIso.trim()) {
+    return { text: 'Deadline not stated', isUrgent: false, isExpired: false };
+  }
+  const deadline = Date.parse(deadlineIso);
+  if (!Number.isFinite(deadline)) {
+    return { text: 'Deadline needs verification', isUrgent: false, isExpired: false };
+  }
+  const diff = deadline - Date.now();
   if (diff <= 0) {
     return { text: 'Closed / Expired', isUrgent: true, isExpired: true };
   }

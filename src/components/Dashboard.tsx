@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { User } from 'firebase/auth';
 import { ArrowRight, Bell, Clock, FolderOpen, Search, Sparkles, FileCheck, Calculator } from 'lucide-react';
 import { Tender } from '../types';
+import { formatTenderValue } from '../utils/formatters';
 
 interface DashboardProps {
   user: User;
@@ -19,13 +20,7 @@ function daysLeft(deadline: string): number | null {
 }
 
 function formatValue(t: Tender): string {
-  if (!t.budget) return 'Value not stated';
-  if (t.currency === 'INR') {
-    return t.budget >= 10_000_000
-      ? `₹${(t.budget / 10_000_000).toFixed(2)} Cr`
-      : `₹${(t.budget / 100_000).toFixed(2)} Lakh`;
-  }
-  return `${t.currency} ${t.budget.toLocaleString()}`;
+  return formatTenderValue(t.budget, t.currency);
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ user, tenders, unreadCount, onNavigate, onOpenTender }) => {
@@ -37,7 +32,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, tenders, unreadCount
     // Sample tenders must not drive deadline alerts or personal bid counts.
     const usableTenders = tenders.filter((t) => t.dataSource !== 'sample');
     const withDays = usableTenders.map((t) => ({ t, d: daysLeft(t.submissionDeadline) }));
-    const openList = withDays.filter((x) => x.d === null || x.d >= 0);
+    const openList = withDays.filter((x) => x.d !== null && x.d >= 0);
     return {
       open: openList.length,
       closingSoon: openList

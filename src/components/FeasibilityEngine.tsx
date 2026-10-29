@@ -1,7 +1,7 @@
 import { apiJson } from '../services/api';
 import React, { useState } from 'react';
 import { CompanyProfile, CurrencyType, FeasibilityResult, Tender } from '../types';
-import { formatCurrency, getFitScoreColor } from '../utils/formatters';
+import { formatTenderValue, getFitScoreColor } from '../utils/formatters';
 import {
   ShieldCheck,
   AlertTriangle,
@@ -88,7 +88,7 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
           </div>
           <h2 className="text-xl font-black text-stone-900 tracking-tight">{tender.title}</h2>
           <p className="text-xs text-stone-500 mt-1">
-            Tender Value: <strong className="text-[#3f5724] font-mono font-black">{formatCurrency(tender.budget, currency)}</strong> | Authority: {tender.authority}
+            Tender Value: <strong className="text-[#3f5724] font-mono font-black">{formatTenderValue(tender.budget, tender.currency)}</strong> | Authority: {tender.authority}
           </p>
         </div>
 
@@ -218,13 +218,13 @@ export const FeasibilityEngine: React.FC<FeasibilityEngineProps> = ({
             <div className="flex justify-between text-stone-600">
               <span>Company Annual Turnover:</span>
               <span className="font-bold text-stone-900 font-mono">
-                {companyProfile.annualTurnover > 0 ? formatCurrency(companyProfile.annualTurnover, companyProfile.currency) : 'Not provided'}
+                {companyProfile.annualTurnover > 0 ? formatTenderValue(companyProfile.annualTurnover, companyProfile.currency) : 'Not provided'}
               </span>
             </div>
             <div className="flex justify-between text-stone-600">
               <span>Required Tender Turnover:</span>
               <span className="font-bold text-stone-700 font-mono">
-                {requiredTurnover > 0 ? formatCurrency(requiredTurnover, tender.currency) : 'Not stated in structured record'}
+                {requiredTurnover > 0 ? formatTenderValue(requiredTurnover, tender.currency) : 'Not stated in structured record'}
               </span>
             </div>
             <div className="flex justify-between text-stone-600">

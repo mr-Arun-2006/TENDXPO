@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CurrencyType, SectorType, Tender } from '../types';
-import { formatCurrency, getTimeRemaining, getSectorBadgeColor, getFitScoreColor } from '../utils/formatters';
+import { formatTenderValue, getTimeRemaining, getSectorBadgeColor, getFitScoreColor } from '../utils/formatters';
 import { useTranslation } from '../context/LanguageContext';
 import {
   Search,
@@ -289,13 +289,13 @@ export const TenderList: React.FC<TenderListProps> = ({
                   <div>
                     <span className="text-[11px] text-stone-500 block">Tender Value</span>
                     <span className="font-black text-stone-900 text-sm font-mono">
-                      {formatCurrency(tender.budget, currency)}
+                      {formatTenderValue(tender.budget, tender.currency)}
                     </span>
                   </div>
                   <div>
                     <span className="text-[11px] text-stone-500 block">Duration</span>
                     <span className="font-bold text-stone-800">
-                      {tender.completionDurationDays} Days
+                      {tender.completionDurationDays > 0 ? `${tender.completionDurationDays} Days` : 'Not stated'}
                     </span>
                   </div>
                   <div>
@@ -330,7 +330,7 @@ export const TenderList: React.FC<TenderListProps> = ({
               {/* Action Buttons Row */}
               <div className="mt-5 pt-4 border-t border-stone-100 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-1 text-[11px] text-stone-500 font-mono font-medium">
-                  <span>EMD: {formatCurrency(tender.emdAmount, currency)}</span>
+                  <span>EMD: {formatTenderValue(tender.emdAmount, tender.currency)}</span>
                 </div>
 
                 <div className="flex items-center gap-2">
