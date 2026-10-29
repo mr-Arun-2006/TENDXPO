@@ -68,31 +68,12 @@ export const CostEstimationEngine: React.FC<CostEstimationEngineProps> = ({
     setCompletionDays(tender.completionDurationDays || 365);
   }, [tender.id]);
 
+  const [priceSyncWarning, setPriceSyncWarning] = useState<string | null>(null);
+
   const handleSyncCommodities = () => {
-    const updated = boqItems.map((item) => {
-      const match = commodities.find(
-        (c) =>
-          item.name.toLowerCase().includes(c.name.split(' ')[0].toLowerCase()) ||
-          (c.name.includes('Steel') && item.name.includes('Steel')) ||
-          (c.name.includes('Cement') && item.name.includes('Cement')) ||
-          (c.name.includes('Sand') && item.name.includes('Sand')) ||
-          (c.name.includes('Paint') && item.name.includes('Paint')) ||
-          (c.name.includes('Diesel') && item.name.includes('Fuel'))
-      );
-
-      if (match && match.currentPrice) {
-        const newRate = match.currentPrice;
-        return {
-          ...item,
-          unitRate: newRate,
-          total: Math.round(item.quantity * newRate),
-          isFluctuating: match.volatility !== 'Low',
-        };
-      }
-      return item;
-    });
-
-    setBoqItems(updated);
+    setPriceSyncWarning(
+      'No verified live price provider is connected. No sample rate was copied into the BOQ; enter verified supplier quotations manually.'
+    );
     onRefreshCommodities();
   };
 
@@ -175,12 +156,8 @@ export const CostEstimationEngine: React.FC<CostEstimationEngineProps> = ({
   const varianceAmount = totalBidAmount - officialBudget;
   const variancePercent = Number(((varianceAmount / officialBudget) * 100).toFixed(1));
 
-  let calculatedWinProbability = 75;
-  if (variancePercent <= -15) calculatedWinProbability = 92;
-  else if (variancePercent <= -8) calculatedWinProbability = 85;
-  else if (variancePercent <= -2) calculatedWinProbability = 76;
-  else if (variancePercent <= 5) calculatedWinProbability = 60;
-  else calculatedWinProbability = Math.max(25, 50 - Math.round(variancePercent * 1.5));
+  // Price variance alone cannot support a credible probability of winning.
+  const calculatedWinProbability = 0;
 
   const currentCalculation: BidCalculation = {
     directMaterialsCost,
@@ -236,10 +213,10 @@ export const CostEstimationEngine: React.FC<CostEstimationEngineProps> = ({
             <button
               onClick={handleSyncCommodities}
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-[#3f5724] border border-stone-200 text-xs font-bold transition"
-              title="Pull latest live commodity spot prices (Steel, Cement, Sand, Paints, Fuel)"
+              title="No verified live commodity-price provider is connected"
             >
               <RefreshCw className="w-3.5 h-3.5 text-[#4d6b2f]" />
-              <span>Sync Spot Rates (₹)</span>
+              <span>Check Price Source</span>
             </button>
 
             <button
@@ -271,6 +248,18 @@ export const CostEstimationEngine: React.FC<CostEstimationEngineProps> = ({
               {tpl.name}
             </button>
           ))}
+        </div>
+      </div>
+
+      <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex items-start gap-3">
+        <ShieldAlert className="w-5 h-5 mt-0.5 shrink-0" />
+        <div className="space-y-1">
+          <h3 className="text-sm font-extrabold">BOQ template rates are illustrative assumptions</h3>
+          <p className="text-xs leading-relaxed">
+            No verified live material-price provider is connected. These are not supplier quotations.
+            Check quantities, units, current local quotes, taxes, EMD, logistics and tender price-variation clauses before relying on an estimate.
+          </p>
+          {priceSyncWarning && <p role="status" className="text-xs font-bold">{priceSyncWarning}</p>}
         </div>
       </div>
 
@@ -322,7 +311,7 @@ export const CostEstimationEngine: React.FC<CostEstimationEngineProps> = ({
                           {item.isFluctuating && (
                             <span
                               className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"
-                              title="Active commodity market fluctuation tracking"
+                              title="Illustrative template item; rate needs verification"
                             ></span>
                           )}
                         </div>
@@ -509,7 +498,7 @@ export const CostEstimationEngine: React.FC<CostEstimationEngineProps> = ({
                 <span>Strategic Bid Positioning</span>
               </h3>
               <p className="text-xs text-stone-500">
-                Optimize profit margins against Indian CPWD / GeM L1 competitive rules
+                Model bid cost and margin assumptions. The applicable evaluation method must be confirmed from the tender.
               </p>
             </div>
 
@@ -525,7 +514,7 @@ export const CostEstimationEngine: React.FC<CostEstimationEngineProps> = ({
               >
                 <div className="text-[11px] font-bold">Aggressive L1</div>
                 <div className="text-xs mt-1 font-mono">7% Margin</div>
-                <div className="text-[10px] text-emerald-700 font-semibold mt-0.5">88% Win Odds</div>
+                <div className="text-[10px] text-stone-500 font-semibold mt-0.5">No win odds estimated</div>
               </button>
 
               <button
@@ -538,7 +527,7 @@ export const CostEstimationEngine: React.FC<CostEstimationEngineProps> = ({
               >
                 <div className="text-[11px] font-bold">Optimal Sweet-Spot</div>
                 <div className="text-xs mt-1 font-mono">12.5% Margin</div>
-                <div className="text-[10px] text-stone-200 font-medium mt-0.5">74% Win Odds</div>
+                <div className="text-[10px] text-stone-200 font-medium mt-0.5">No win odds estimated</div>
               </button>
 
               <button
@@ -551,7 +540,7 @@ export const CostEstimationEngine: React.FC<CostEstimationEngineProps> = ({
               >
                 <div className="text-[11px] font-bold">Defensive Buffer</div>
                 <div className="text-xs mt-1 font-mono">18% Margin</div>
-                <div className="text-[10px] text-stone-500 mt-0.5">38% Win Odds</div>
+                <div className="text-[10px] text-stone-500 mt-0.5">No win odds estimated</div>
               </button>
             </div>
 
@@ -677,13 +666,13 @@ export const CostEstimationEngine: React.FC<CostEstimationEngineProps> = ({
             {/* Win Probability Bar */}
             <div className="space-y-1.5 pt-2">
               <div className="flex justify-between text-xs">
-                <span className="text-stone-600 font-medium">Predicted Win Probability:</span>
-                <span className="font-black text-[#3f5724]">{calculatedWinProbability}%</span>
+                <span className="text-stone-600 font-medium">Win probability:</span>
+                <span className="font-black text-[#3f5724]">Not estimated</span>
               </div>
               <div className="w-full h-2.5 rounded-full bg-stone-200 overflow-hidden">
                 <div
                   className="h-full rounded-full bg-linear-to-r from-lime-600 to-[#4d6b2f] transition-all duration-500"
-                  style={{ width: `${calculatedWinProbability}%` }}
+                  style={{ width: '0%' }}
                 ></div>
               </div>
             </div>
