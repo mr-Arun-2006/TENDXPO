@@ -1,26 +1,20 @@
 import { BOQItem, CompanyProfile, PortalNotification, SectorType, Tender } from '../types';
 
 export const DEFAULT_COMPANY_PROFILE: CompanyProfile = {
-  name: 'Apex Infrastructure & Tech Consortium Ltd.',
-  annualTurnover: 8500000,
-  availableSolvency: 3200000,
-  activeProjectsCount: 4,
-  maxProjectCapacity: 8,
-  currentCapacityUtilizationPercent: 55,
-  pastPerformanceRating: 4.8,
-  certifications: [
-    'ISO 9001:2015 Quality Management',
-    'ISO 14001:2015 Environmental Management',
-    'ISO 45001:2018 Occupational Health & Safety',
-    'CPWD Class-1 Civil License',
-    'CMMI Level 3 Software Development',
-    'GST & Statutory Clearance Compliant',
-  ],
-  skilledWorkforceCount: 85,
-  unskilledWorkforceCount: 160,
-  heavyMachineryCount: 24,
-  historicalWinRate: 68.4,
-  targetMarginPercent: 12.5,
+  // Blank starting profile: users must enter their own verified company information.
+  name: '',
+  annualTurnover: 0,
+  availableSolvency: 0,
+  activeProjectsCount: 0,
+  maxProjectCapacity: 0,
+  currentCapacityUtilizationPercent: 0,
+  pastPerformanceRating: 0,
+  certifications: [],
+  skilledWorkforceCount: 0,
+  unskilledWorkforceCount: 0,
+  heavyMachineryCount: 0,
+  historicalWinRate: 0,
+  targetMarginPercent: 10,
   currency: 'INR',
 };
 
@@ -322,44 +316,4 @@ export const SECTOR_BOQ_TEMPLATES: Record<string, { name: string; sector: Sector
   },
 };
 
-export const INITIAL_NOTIFICATIONS: PortalNotification[] = [
-  {
-    id: 'notif-1',
-    timestamp: '10 mins ago',
-    type: 'Price Alert',
-    title: 'Steel Price Fluctuation Alert (+4.8%)',
-    message: 'Fe550D TMT Steel climbed to $745/MT. Recommended adjusting escalation buffer on active building construction bids.',
-    severity: 'warning',
-    read: false,
-  },
-  {
-    id: 'notif-2',
-    timestamp: '45 mins ago',
-    type: 'Deadline Warning',
-    title: 'Submission Deadline Approaching (T-48h)',
-    message: 'TND-2026-IT-512 "State Enterprise PWA Tender" closes in 2 days. Final review pending.',
-    tenderId: 'TND-2026-IT-512',
-    severity: 'critical',
-    read: false,
-  },
-  {
-    id: 'notif-3',
-    timestamp: '2 hours ago',
-    type: 'New Tender',
-    title: 'New Bid Match on GeM: AIIMS Medical ICU Ventilators',
-    message: 'NIT Ref AIIMS/EMERG-EQUIP/2026/19. Company Fit Score: 82%. Solvency verified.',
-    tenderId: 'TND-2026-MED-303',
-    severity: 'info',
-    read: false,
-  },
-  {
-    id: 'notif-4',
-    timestamp: '1 day ago',
-    type: 'Corrigendum',
-    title: 'Corrigendum #1 Published on CPWD G+8 Tender',
-    message: 'Price variation formula indexed to Wholesale Price Index (WPI) officially approved.',
-    tenderId: 'TND-2026-BLD-089',
-    severity: 'success',
-    read: true,
-  },
-];
+export const INITIAL_NOTIFICATIONS: PortalNotification[] = [];
