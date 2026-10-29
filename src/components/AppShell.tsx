@@ -5,7 +5,8 @@ import {
   ChevronDown,
   FileCheck,
   FileSpreadsheet,
-  Globe2,
+  Home,
+  Search,
   Kanban,
   Languages,
   LogOut,
@@ -32,15 +33,16 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { id: 'tenders', label: 'Tenders', icon: Globe2, primary: true },
-  { id: 'assistant', label: 'AI Assistant', icon: Sparkles, primary: true },
-  { id: 'pipeline', label: 'Pipeline', icon: Kanban, primary: true },
-  { id: 'feasibility', label: 'Feasibility', icon: SlidersHorizontal },
-  { id: 'costing', label: 'Costing & BOQ', icon: FileSpreadsheet },
+  { id: 'dashboard', label: 'Home', icon: Home, primary: true },
+  { id: 'tenders', label: 'Find tenders', icon: Search, primary: true },
+  { id: 'assistant', label: 'Ask AI', icon: Sparkles, primary: true },
+  { id: 'pipeline', label: 'My bids', icon: Kanban },
+  { id: 'feasibility', label: 'Can I bid?', icon: SlidersHorizontal },
+  { id: 'costing', label: 'Price my bid', icon: FileSpreadsheet },
   { id: 'proposal', label: 'Proposal', icon: FileCheck },
-  { id: 'commodities', label: 'Commodity prices', icon: TrendingUp },
-  { id: 'sources', label: 'Official sources', icon: ShieldCheck },
-  { id: 'account', label: 'Account & alerts', icon: UserIcon },
+  { id: 'commodities', label: 'Material prices', icon: TrendingUp },
+  { id: 'sources', label: 'Data sources', icon: ShieldCheck },
+  { id: 'account', label: 'My account', icon: UserIcon },
 ];
 
 interface AppShellProps {
@@ -177,7 +179,7 @@ export const AppShell: React.FC<AppShellProps> = ({
               className={`h-16 flex flex-col items-center justify-center gap-0.5 text-[11px] font-bold ${active ? 'text-[#3f5724]' : 'text-stone-500'}`}
             >
               <Icon className="w-5 h-5" />
-              {item.label.replace('AI ', '')}
+              {item.label}
             </button>
           );
         })}
