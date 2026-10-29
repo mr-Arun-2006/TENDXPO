@@ -87,8 +87,8 @@ class PortalWebSocketService {
       this.updateState({
         connected: true,
         status: 'connected',
-        activePortals: data.activePortals || this.state.activePortals,
-        connectedClientsCount: data.connectedClientsCount || 1,
+        activePortals: data.activePortals ?? this.state.activePortals,
+        connectedClientsCount: data.connectedClientsCount ?? 0,
       });
 
       // Dispatch initial recent events if any
@@ -125,9 +125,12 @@ class PortalWebSocketService {
     } else if (msg.type === 'portal:status') {
       const data = msg.data || {};
       this.updateState({
-        connectedClientsCount: data.connectedClientsCount || this.state.connectedClientsCount,
+        connectedClientsCount: data.connectedClientsCount ?? this.state.connectedClientsCount,
         activePortals: data.activePortals || this.state.activePortals,
       });
+    } else if (msg.type === 'portal:scan_unavailable') {
+      this.updateState({ connected: true, status: 'error', activePortals: [] });
+      console.info(msg.message || 'No verified live source connector is configured.');
     } else if (msg.type === 'server:pong') {
       if (msg.clientTimestamp) {
         const roundtrip = Math.max(8, Date.now() - msg.clientTimestamp);
