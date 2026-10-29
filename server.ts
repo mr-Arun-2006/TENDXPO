@@ -794,7 +794,7 @@ app.get('/api/portals', (_req, res) => {
 app.get('/api/tenders', async (req, res) => {
   if (req.query.refresh === '1' && Date.now() - tedCache.at > 60_000) tedCache.at = 0;
   const live = await fetchTedTenders();
-  const local = activeTenders.map((t: any) => ({ dataSource: 'sample', ...t }));
+  const local = activeTenders.map((t: any) => ({ ...t, dataSource: 'sample', companyFitScore: 0 }));
   const all = [...live, ...local];
   res.json({
     status: 'success',
