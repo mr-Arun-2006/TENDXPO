@@ -280,11 +280,13 @@ export default function App() {
 
   // Navigation handlers
   const handleSelectForFeasibility = (tender: Tender) => {
+    if (selectedTender?.id !== tender.id) setActiveCalculation(null);
     setSelectedTender(tender);
     setActiveTab('feasibility');
   };
 
   const handleSelectForCosting = (tender: Tender) => {
+    if (selectedTender?.id !== tender.id) setActiveCalculation(null);
     setSelectedTender(tender);
     setActiveTab('costing');
   };
@@ -423,6 +425,7 @@ export default function App() {
             unreadCount={notifications.filter((n) => !n.read).length}
             onNavigate={setActiveTab}
             onOpenTender={(t) => {
+              if (selectedTender?.id !== t.id) setActiveCalculation(null);
               setSelectedTender(t);
               setActiveTab('feasibility');
             }}
