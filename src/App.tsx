@@ -292,6 +292,7 @@ export default function App() {
   };
 
   const handleSelectForProposal = (tender: Tender) => {
+    if (selectedTender?.id !== tender.id) setActiveCalculation(null);
     setSelectedTender(tender);
     setActiveTab('proposal');
   };
@@ -476,6 +477,7 @@ export default function App() {
             currency={currency}
             onUpdateTenderStatus={handleUpdateTenderStatus}
             onSelectTender={(t) => {
+              if (selectedTender?.id !== t.id) setActiveCalculation(null);
               setSelectedTender(t);
               setActiveTab('costing');
             }}
@@ -570,6 +572,7 @@ export default function App() {
         onSelectTenderById={(id) => {
           const t = tenders.find((item) => item.id === id);
           if (t) {
+            if (selectedTender?.id !== t.id) setActiveCalculation(null);
             setSelectedTender(t);
             setActiveTab('costing');
           }
