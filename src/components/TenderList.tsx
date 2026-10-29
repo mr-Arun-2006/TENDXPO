@@ -28,6 +28,19 @@ interface TenderListProps {
   onAddNewTender: (newTender: Partial<Tender>) => void;
 }
 
+const MetricCard: React.FC<{ label: string; value: number; detail: string; icon: React.ReactNode }> = ({ label, value, detail, icon }) => (
+  <div className="p-4 rounded-2xl bg-white border border-stone-200 shadow-xs flex items-start justify-between gap-3">
+    <div className="min-w-0">
+      <p className="text-xs font-semibold text-stone-500">{label}</p>
+      <p className="text-2xl font-black text-stone-900 mt-1 font-mono">{value}</p>
+      <p className="text-[11px] text-stone-500 mt-1 leading-relaxed">{detail}</p>
+    </div>
+    <div className="w-11 h-11 shrink-0 rounded-2xl bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-600">
+      {icon}
+    </div>
+  </div>
+);
+
 export const TenderList: React.FC<TenderListProps> = ({
   tenders,
   currency,
@@ -79,36 +92,36 @@ export const TenderList: React.FC<TenderListProps> = ({
     if (!customTitle || !customAuthority) return;
 
     onAddNewTender({
-      title: customTitle,
-      authority: customAuthority,
+      title: customTitle.trim(),
+      authority: customAuthority.trim(),
       sector: customSector,
       budget: Number(customBudget),
       currency: 'INR',
       completionDurationDays: Number(customDays),
-      portal: 'Manual entry',
+      portal: 'Manual entry — source not verified',
       dataSource: 'user',
-      refNumber: `NIT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-      location: 'Regional Zone (India)',
-      state: 'State Capital',
+      refNumber: `MANUAL-${new Date().getFullYear()}-${Date.now()}`,
+      location: 'Not provided',
+      state: '',
       country: 'India',
-      emdAmount: Math.round(Number(customBudget) * 0.02),
-      performanceGuarantee: '5% of Contract Value',
-      description: 'Manually logged official tender opportunity for feasibility calculation and cost estimation.',
-      scopeOfWork: 'Civil reinforcement, high-grade cement batching, workforce allocation, and completion milestone schedule.',
+      emdAmount: 0,
+      performanceGuarantee: 'Not provided',
+      description: 'User-entered tender record. Verify all details against the original notice before relying on it.',
+      scopeOfWork: 'Not provided. Upload the original tender documents to extract and verify the scope of work.',
       eligibilityCriteria: {
-        minAnnualTurnover: Math.round(Number(customBudget) * 1.2),
-        minExperienceYears: 5,
-        similarProjectsCount: 2,
-        requiredCertifications: ['ISO 9001:2015', 'CPWD Class-1 License'],
-        minSolvencyCertificate: Math.round(Number(customBudget) * 0.3),
+        minAnnualTurnover: 0,
+        minExperienceYears: 0,
+        similarProjectsCount: 0,
+        requiredCertifications: [],
+        minSolvencyCertificate: 0,
       },
       status: 'Discovered',
-      companyFitScore: 82,
-      feasibilityVerdict: 'High Viability',
-      competitorBidsCount: 4,
-      lastScraped: 'Just now',
+      companyFitScore: 0,
+      feasibilityVerdict: 'Not analyzed',
+      competitorBidsCount: 0,
+      lastScraped: '',
       addendums: [],
-      documents: [{ name: 'NIT_Detailed_Notice.pdf', size: '2.1 MB', type: 'Notice' }],
+      documents: [],
       defaultBiddingTemplate: customSector === 'IT & Cloud' ? 'it_software' : 'civil_building',
     });
 
@@ -119,63 +132,37 @@ export const TenderList: React.FC<TenderListProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Top Banner & Metric highlights */}
+      {/* Provenance-aware workspace metrics. Mixed-currency totals and fake live-sync claims are intentionally omitted. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-2xl bg-white border border-stone-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-stone-500">{t('metricActiveBids', 'Active Monitored Bids')}</p>
-            <p className="text-2xl font-black text-stone-900 mt-1">{tenders.length}</p>
-            <p className="text-[11px] text-[#4d6b2f] mt-0.5 flex items-center gap-1 font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#4d6b2f] animate-pulse"></span>
-              {t('metricLiveSync', 'Live sync with GeM & CPPP')}
-            </p>
-          </div>
-          <div className="w-11 h-11 rounded-2xl bg-[#4d6b2f]/10 border border-[#4d6b2f]/20 flex items-center justify-center text-[#4d6b2f]">
-            <Landmark className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white border border-stone-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-stone-500">{t('metricPipelineValue', 'Total Pipeline Value')}</p>
-            <p className="text-2xl font-black text-stone-900 mt-1 font-mono">
-              {formatCurrency(
-                tenders.reduce((acc, t) => acc + t.budget, 0),
-                currency
-              )}
-            </p>
-            <p className="text-[11px] text-stone-400 mt-0.5">{t('metricInrBudgets', 'Official INR contract budgets')}</p>
-          </div>
-          <div className="w-11 h-11 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-700">
-            <Building className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white border border-stone-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-stone-500">{t('metricHighMatch', 'High Match Opportunities')}</p>
-            <p className="text-2xl font-black text-[#3f5724] mt-1 font-mono">
-              {tenders.filter((t) => t.companyFitScore >= 80).length}
-            </p>
-            <p className="text-[11px] text-[#4d6b2f] mt-0.5 font-medium">{t('metricAlignment', 'Score ≥ 80% alignment')}</p>
-          </div>
-          <div className="w-11 h-11 rounded-2xl bg-[#4d6b2f]/10 border border-[#4d6b2f]/20 flex items-center justify-center text-[#4d6b2f]">
-            <ShieldCheck className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white border border-stone-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-stone-500">{t('metricUrgentClosing', 'Urgent Closing Soon')}</p>
-            <p className="text-2xl font-black text-amber-600 mt-1 font-mono">
-              {tenders.filter((t) => getTimeRemaining(t.submissionDeadline).isUrgent).length}
-            </p>
-            <p className="text-[11px] text-amber-600/80 mt-0.5 font-medium">{t('metricClosingNotice', 'Closing within 48-72 hours')}</p>
-          </div>
-          <div className="w-11 h-11 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600">
-            <Clock className="w-5 h-5" />
-          </div>
-        </div>
+        <MetricCard
+          label="Workspace records"
+          value={tenders.length}
+          detail={`${tenders.filter((t) => t.dataSource === 'live-ted').length} live TED · ${tenders.filter((t) => t.dataSource === 'sample').length} sample · ${tenders.filter((t) => t.dataSource === 'user').length} user-entered`}
+          icon={<Landmark className="w-5 h-5" />}
+        />
+        <MetricCard
+          label="Analyzed matches"
+          value={tenders.filter((t) => t.dataSource !== 'sample' && t.companyFitScore > 0).length}
+          detail="Fit score calculated in this session"
+          icon={<ShieldCheck className="w-5 h-5" />}
+        />
+        <MetricCard
+          label="Deadlines within 7 days"
+          value={tenders.filter((t) => {
+            if (t.dataSource === 'sample' || !t.submissionDeadline) return false;
+            const due = Date.parse(t.submissionDeadline);
+            const days = (due - Date.now()) / 86400000;
+            return Number.isFinite(due) && days >= 0 && days <= 7;
+          }).length}
+          detail="Only records with a stated deadline"
+          icon={<Clock className="w-5 h-5" />}
+        />
+        <MetricCard
+          label="Deadlines not stated"
+          value={tenders.filter((t) => t.dataSource !== 'sample' && !t.submissionDeadline).length}
+          detail="Check the original notice"
+          icon={<AlertTriangle className="w-5 h-5" />}
+        />
       </div>
 
       {/* Filter and Search Bar */}
@@ -379,9 +366,9 @@ export const TenderList: React.FC<TenderListProps> = ({
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
           <div className="w-full max-w-lg rounded-3xl bg-white border border-stone-200 p-6 sm:p-8 shadow-2xl text-stone-900">
-            <h3 className="text-lg font-black text-stone-900 mb-1">Intake Official Government Bid</h3>
+            <h3 className="text-lg font-black text-stone-900 mb-1">Add a tender record</h3>
             <p className="text-xs text-stone-500 mb-4">
-              Enter Indian official tender notice details (CPWD / GeM / CPPP) for BOQ costing.
+              Enter the fields you know. Missing requirements, dates and values must be verified from the original notice before analysis or bidding.
             </p>
 
             <form onSubmit={handleCreateCustomTender} className="space-y-4">
