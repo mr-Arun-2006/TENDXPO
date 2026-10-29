@@ -19,13 +19,7 @@ function daysLeft(deadline: string): number | null {
 }
 
 function formatValue(t: Tender): string {
-  if (!t.budget) return 'Value not stated';
-  if (t.currency === 'INR') {
-    return t.budget >= 10_000_000
-      ? `₹${(t.budget / 10_000_000).toFixed(2)} Cr`
-      : `₹${(t.budget / 100_000).toFixed(2)} Lakh`;
-  }
-  return `${t.currency} ${t.budget.toLocaleString()}`;
+  return formatTenderValue(t.budget, t.currency);
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ user, tenders, unreadCount, onNavigate, onOpenTender }) => {
