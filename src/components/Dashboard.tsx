@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { User } from 'firebase/auth';
 import { ArrowRight, Bell, Clock, FolderOpen, Search, Sparkles, FileCheck, Calculator } from 'lucide-react';
 import { Tender } from '../types';
+import { formatTenderValue } from '../utils/formatters';
 
 interface DashboardProps {
   user: User;
