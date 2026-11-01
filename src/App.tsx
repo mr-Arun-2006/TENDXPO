@@ -94,7 +94,7 @@ export default function App() {
           read: false,
         };
         setNotifications((prev) => [notif, ...prev]);
-        showToast(`Simulated feed: ${latest.title.slice(0, 38)}...`);
+        showToast(`New official notice: ${latest.title.slice(0, 38)}...`);
       } else if (latest.eventType === 'corrigendum_issued') {
         const notif: PortalNotification = {
           id: `notif-${latest.id}`,
