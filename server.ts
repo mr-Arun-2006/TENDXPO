@@ -22,6 +22,16 @@ const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '1mb' }));
 
+// Baseline security headers. A Content-Security-Policy is deliberately not set yet: the SPA loads
+// Firebase, Google and Vite assets, and that policy needs to be tuned against the real app first.
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
+});
+
 // ---------------------------------------------------------------------------
 // Firebase ID-token verification (no firebase-admin dependency).
 // Verifies RS256 signature against Google's public keys + standard claims.
