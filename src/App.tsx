@@ -80,21 +80,21 @@ export default function App() {
           if (prev.some((t) => t.id === latest.tenderData!.id || t.refNumber === latest.tenderData!.refNumber)) {
             return prev;
           }
-          return [{ ...latest.tenderData!, dataSource: 'sample' as const }, ...prev];
+          return [latest.tenderData!, ...prev];
         });
 
         const notif: PortalNotification = {
           id: `notif-${latest.id}`,
           timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
           type: 'New Tender',
-          title: `[Simulated feed] ${latest.portal}: new tender`,
+          title: `[Official notice] ${latest.portal}: new notice`,
           message: `${latest.title} (₹${((latest.budget || 0) / 10000000).toFixed(2)} Cr)`,
           tenderId: latest.tenderData.id,
           severity: 'success',
           read: false,
         };
         setNotifications((prev) => [notif, ...prev]);
-        showToast(`Simulated feed: ${latest.title.slice(0, 38)}...`);
+        showToast(`New official notice: ${latest.title.slice(0, 38)}...`);
       } else if (latest.eventType === 'corrigendum_issued') {
         const notif: PortalNotification = {
           id: `notif-${latest.id}`,
@@ -211,7 +211,7 @@ export default function App() {
     setIsScraping(true);
     await fetchTenders(true);
     setIsScraping(false);
-    showToast('Tender feed refreshed from official sources.');
+    showToast('Checked TED for new notices. GeM and CPPP open on their own sites.');
   };
 
   // User adds custom tender
