@@ -589,6 +589,15 @@ const RECENT_PORTAL_EVENTS: PortalLiveEventData[] = [];
 // Connection bookkeeping only; an open socket does not mean an official portal is connected.
 const wsClients = new Set<WebSocket>();
 
+function broadcastPortalEvent(event: Record<string, any>): void {
+  const message = JSON.stringify({ type: 'portal:event', event });
+  for (const client of wsClients) {
+    if (client.readyState === WebSocket.OPEN) {
+      try { client.send(message); } catch (err) { console.warn('Could not broadcast portal event:', err); }
+    }
+  }
+}
+
 function broadcastPortalStatus(): void {
   const message = JSON.stringify({
     type: 'portal:status',
@@ -659,12 +668,8 @@ wss.on('connection', (ws: WebSocket) => {
           })
         );
       } else if (msg.type === 'client:trigger_scan') {
-        ws.send(JSON.stringify({
-          type: 'portal:scan_unavailable',
-          portal: msg.portal || 'CPPP',
-          message: 'A verified live connector is not configured for this portal. Open the official source instead.',
-          timestamp: new Date().toISOString(),
-        }));
+        // Only TED has a verified API. Other portals stay link-only and are not scanned.
+        pollTedFeed(true).catch((e: any) => console.warn('TED poll failed:', e?.message));
       }
     } catch (err) {
       console.warn('Error handling WS message:', err);
@@ -681,6 +686,44 @@ wss.on('connection', (ws: WebSocket) => {
     wsClients.delete(ws);
   });
 });
+
+// Live feed: poll TED (the only verified open API) and broadcast ONLY notices not seen before.
+// The first poll after start is silent so existing notices are not announced as new.
+let tedSeenIds: Set<string> | null = null;
+async function pollTedFeed(force = false): Promise<{ tenders: TedTender[]; newCount: number }> {
+  if (force) tedCache.at = 0;
+  const tenders = await fetchTedTenders();
+  if (tedSeenIds === null) {
+    tedSeenIds = new Set(tenders.map((t) => String(t.id)));
+    return { tenders, newCount: 0 };
+  }
+  let newCount = 0;
+  for (const t of tenders) {
+    if (tedSeenIds.has(String(t.id))) continue;
+    tedSeenIds.add(String(t.id));
+    newCount++;
+    if (wsClients.size > 0) {
+      broadcastPortalEvent({
+        id: `evt-ted-${t.refNumber}`,
+        portal: 'TED',
+        eventType: 'tender_published',
+        title: `[TED official notice] ${t.title}`,
+        refNumber: t.refNumber,
+        tenderId: t.id,
+        timestamp: new Date().toISOString(),
+        severity: 'success',
+        details: `Published on TED by ${t.authority}. Deadline: ${t.submissionDeadline || 'see notice'}.`,
+        sector: t.sector,
+        url: t.sourceUrl,
+        impactNote: 'Verify on the source notice before bidding.',
+        tenderData: t,
+      });
+    }
+  }
+  return { tenders, newCount };
+}
+setTimeout(() => pollTedFeed(true).catch(() => {}), 3000);
+setInterval(() => pollTedFeed(true).catch(() => {}), 5 * 60_000);
 
 // No periodic synthetic events. Real notifications must be derived from source changes.
 
