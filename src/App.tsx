@@ -21,7 +21,8 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { GoogleChatModal } from './components/GoogleChatModal';
 import { usePortalWebSocket } from './hooks/usePortalWebSocket';
 import { User } from 'firebase/auth';
-import { getCompanyProfile, getUserTenderStates, initAuth, logout, saveCompanyProfile, saveUserTenderState } from './services/firebase';
+import { getCompanyProfile, getTenderBookmarks, getUserTenderStates, initAuth, logout, saveCompanyProfile, saveTenderBookmark, saveUserTenderState, TenderBookmark } from './services/firebase';
+import { EvaluationNotes, serializeNotes } from './services/tenderNotes';
 
 const APP_TABS = ['dashboard','tenders','assistant','pipeline','feasibility','costing','proposal','commodities','sources','account'];
 
@@ -42,6 +43,7 @@ export default function App() {
   const [commodities, setCommodities] = useState<CommodityPrice[]>([]);
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(DEFAULT_COMPANY_PROFILE);
   const [notifications, setNotifications] = useState<PortalNotification[]>(INITIAL_NOTIFICATIONS);
+  const [bookmarks, setBookmarks] = useState<Record<string, TenderBookmark>>({});
 
   // Active selected tender for deep dive
   const [selectedTender, setSelectedTender] = useState<Tender | null>(null);
@@ -68,6 +70,76 @@ export default function App() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // Followed tenders (BidAssist-style): load the signed-in user's bookmarks.
+  useEffect(() => {
+    if (!currentUser) {
+      setBookmarks({});
+      return;
+    }
+    getTenderBookmarks(currentUser.uid)
+      .then(setBookmarks)
+      .catch((err) => console.warn('Could not load followed tenders:', err?.message));
+  }, [currentUser?.uid]);
+
+  // In-app deadline warning for followed tenders that close within three days.
+  useEffect(() => {
+    const now = Date.now();
+    const due = tenders.filter((t) => {
+      if (!bookmarks[t.id]?.starred || !t.submissionDeadline) return false;
+      const ms = Date.parse(t.submissionDeadline);
+      if (!Number.isFinite(ms)) return false;
+      const days = (ms - now) / 86400000;
+      return days >= 0 && days <= 3;
+    });
+    if (due.length === 0) return;
+    setNotifications((prev) => {
+      const fresh = due
+        .filter((t) => !prev.some((n) => n.id === `deadline-${t.id}`))
+        .map((t): PortalNotification => ({
+          id: `deadline-${t.id}`,
+          timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+          type: 'Deadline Warning',
+          title: 'Followed tender closes soon',
+          message: `${t.title} closes ${new Date(t.submissionDeadline).toLocaleString('en-IN')}`,
+          tenderId: t.id,
+          severity: 'warning',
+          read: false,
+        }));
+      return fresh.length ? [...fresh, ...prev] : prev;
+    });
+  }, [tenders, bookmarks]);
+
+  const requireSignIn = (): User | null => {
+    if (currentUser) return currentUser;
+    showToast('Sign in to follow tenders and save notes.');
+    navigateTo('login');
+    return null;
+  };
+
+  const handleToggleFollow = async (tender: Tender) => {
+    const user = requireSignIn();
+    if (!user) return;
+    const current = bookmarks[tender.id];
+    const starred = !current?.starred;
+    const notes = current?.notes || '';
+    try {
+      await saveTenderBookmark(user.uid, tender.id, tender.title, { starred, notes });
+      setBookmarks((prev) => ({ ...prev, [tender.id]: { tenderId: tender.id, starred, notes } }));
+      showToast(starred ? 'Following this tender.' : 'Stopped following this tender.');
+    } catch (err: any) {
+      showToast(err?.message || 'Could not update follow. Try again.');
+    }
+  };
+
+  const handleSaveNotes = async (tender: Tender, notes: EvaluationNotes) => {
+    const user = requireSignIn();
+    if (!user) return;
+    const serialized = serializeNotes(notes); // throws if too long; the dialog shows the message
+    await saveTenderBookmark(user.uid, tender.id, tender.title, { starred: true, notes: serialized });
+    setBookmarks((prev) => ({ ...prev, [tender.id]: { tenderId: tender.id, starred: true, notes: serialized } }));
+    showToast('Notes saved. Tender followed.');
   };
 
   // Real-time synchronization when WebSocket receives official portal events
@@ -439,6 +511,9 @@ export default function App() {
           <TenderList
             tenders={tenders}
             currency={currency}
+            followed={bookmarks}
+            onToggleFollow={handleToggleFollow}
+            onSaveNotes={handleSaveNotes}
             onSelectTenderForFeasibility={handleSelectForFeasibility}
             onSelectTenderForCosting={handleSelectForCosting}
             onSelectTenderForProposal={handleSelectForProposal}
