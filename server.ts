@@ -1,4 +1,5 @@
 import express from 'express';
+import { sanitizeInput, buildAnalysisPrompt, parseAnalysis, SYSTEM_PROMPT } from './src/services/tenderAnalysis.js';
 import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import dotenv from 'dotenv';
@@ -880,6 +881,87 @@ app.get('/api/company-profile', (_req, res) => {
 });
 app.post('/api/company-profile', (_req, res) => {
   res.status(410).json({ status: 'retired', message: 'Company profiles are stored in authenticated user-scoped Firestore documents.' });
+});
+
+// ---------------------------------------------------------------------------
+// AI tender analysis (OpenRouter first, NVIDIA second). Keys stay on the server.
+// With no keys configured the endpoint says so; it never returns invented analysis.
+// ---------------------------------------------------------------------------
+type ModelProvider = { name: 'openrouter' | 'nvidia'; url: string; key: string; model: string; headers: Record<string, string> };
+
+function configuredModelProviders(): ModelProvider[] {
+  const list: ModelProvider[] = [];
+  if (process.env.OPENROUTER_API_KEY) {
+    list.push({
+      name: 'openrouter',
+      url: 'https://openrouter.ai/api/v1/chat/completions',
+      key: process.env.OPENROUTER_API_KEY,
+      model: process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
+      headers: { 'X-Title': 'TenDo' },
+    });
+  }
+  if (process.env.NVIDIA_API_KEY) {
+    list.push({
+      name: 'nvidia',
+      url: 'https://integrate.api.nvidia.com/v1/chat/completions',
+      key: process.env.NVIDIA_API_KEY,
+      model: process.env.NVIDIA_MODEL || 'meta/llama-3.1-70b-instruct',
+      headers: {},
+    });
+  }
+  return list;
+}
+
+async function callModelProvider(p: ModelProvider, prompt: string): Promise<string> {
+  const res = await fetch(p.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${p.key}`, ...p.headers },
+    body: JSON.stringify({
+      model: p.model,
+      temperature: 0.2,
+      max_tokens: 1800,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: prompt },
+      ],
+    }),
+    signal: AbortSignal.timeout(45_000),
+  });
+  if (!res.ok) throw new Error(`${p.name} responded ${res.status}`);
+  const body: any = await res.json();
+  const text = body?.choices?.[0]?.message?.content;
+  if (typeof text !== 'string' || !text.trim()) throw new Error(`${p.name} returned no text`);
+  return text;
+}
+
+app.post('/api/ai/analyze-tender', requireAuth, aiRateLimit, async (req, res) => {
+  const input = sanitizeInput(req.body?.tender);
+  if (!input.title) return res.status(400).json({ status: 'error', message: 'A tender with a title is required.' });
+
+  const providers = configuredModelProviders();
+  if (!providers.length) {
+    return res.status(503).json({
+      status: 'not_configured',
+      message: 'AI analysis is not configured. The server needs OPENROUTER_API_KEY or NVIDIA_API_KEY.',
+    });
+  }
+
+  const prompt = buildAnalysisPrompt(input);
+  for (const p of providers) {
+    try {
+      const raw = await callModelProvider(p, prompt);
+      const analysis = parseAnalysis(raw, input);
+      return res.json({
+        status: 'success',
+        source: { provider: p.name, model: p.model },
+        analysis,
+        disclaimer: 'AI-generated from the notice text. The budget breakdown is an estimate, not the official budget. Verify on the source notice before bidding.',
+      });
+    } catch (err: any) {
+      console.warn(`AI analysis via ${p.name} failed:`, err?.message);
+    }
+  }
+  res.status(502).json({ status: 'error', message: 'AI analysis is unavailable right now. Please try again later.' });
 });
 
 // API: Gemini-Powered Feasibility Analysis

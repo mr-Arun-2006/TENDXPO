@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { TenderAnalysisModal } from './TenderAnalysisModal';
 import { CurrencyType, SectorType, Tender } from '../types';
 import { formatTenderValue, getTimeRemaining, getSectorBadgeColor, getFitScoreColor } from '../utils/formatters';
 import { useTranslation } from '../context/LanguageContext';
@@ -49,6 +50,7 @@ export const TenderList: React.FC<TenderListProps> = ({
   onSelectTenderForProposal,
   onAddNewTender,
 }) => {
+  const [analysisTender, setAnalysisTender] = useState<Tender | null>(null);
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSector, setSelectedSector] = useState<string>('All');
@@ -335,6 +337,13 @@ export const TenderList: React.FC<TenderListProps> = ({
 
                 <div className="flex items-center gap-2">
                   <button
+                    onClick={() => setAnalysisTender(tender)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold bg-stone-100 hover:bg-stone-200 text-[#3f5724] border border-stone-200 transition"
+                  >
+                    AI analysis
+                  </button>
+
+                  <button
                     onClick={() => onSelectTenderForFeasibility(tender)}
                     className="px-3 py-1.5 rounded-xl text-xs font-bold bg-stone-100 hover:bg-stone-200 text-[#3f5724] border border-stone-200 transition"
                   >
@@ -467,6 +476,7 @@ export const TenderList: React.FC<TenderListProps> = ({
           </div>
         </div>
       )}
+      {analysisTender && <TenderAnalysisModal tender={analysisTender} onClose={() => setAnalysisTender(null)} />}
     </div>
   );
 };

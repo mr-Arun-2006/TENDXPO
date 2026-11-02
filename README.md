@@ -12,6 +12,7 @@ Every tender is labelled with where it came from.
 | GeM, CPPP, SAM.gov | Link-only. They have no open API and require login or CAPTCHA, so they are not scraped. |
 | Sample tenders | Illustrative demo data. Labelled "Sample" everywhere. Not real notices. |
 | Commodity prices | Static base values. Not a live market feed. |
+| AI analysis (OpenRouter, then NVIDIA) | Analyses the notice text only: summary, dates, eligibility, risks, and a budget estimate. The stated estimate always comes from the notice. Output is labelled AI-generated. |
 
 Always verify a notice on the official portal before bidding.
 
@@ -33,6 +34,10 @@ See `SETUP.md` for Firebase sign-in and Firestore setup.
 | `npm run build` | Production build into `dist/` |
 | `npm run lint` | TypeScript type check |
 | `npm test` | Unit and API tests (Node test runner) |
+
+## AI analysis keys
+
+Set `OPENROUTER_API_KEY` and/or `NVIDIA_API_KEY` as server environment variables (in `.env` locally, and in Vercel's project settings for deploys). They are never sent to the browser. With neither set, the AI analysis button reports that it is not configured.
 
 ## Deploy (Vercel)
 
