@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { TenderAnalysisModal } from './TenderAnalysisModal';
+import { TenderNotesModal } from './TenderNotesModal';
+import { EvaluationNotes, buildFollowedCsv, parseNotes } from '../services/tenderNotes';
 import { CurrencyType, SectorType, Tender } from '../types';
 import { formatTenderValue, getTimeRemaining, getSectorBadgeColor, getFitScoreColor } from '../utils/formatters';
 import { useTranslation } from '../context/LanguageContext';
@@ -18,6 +20,7 @@ import {
   ExternalLink,
   ShieldCheck,
   AlertTriangle,
+  Star,
 } from 'lucide-react';
 
 interface TenderListProps {
@@ -27,6 +30,10 @@ interface TenderListProps {
   onSelectTenderForCosting: (tender: Tender) => void;
   onSelectTenderForProposal: (tender: Tender) => void;
   onAddNewTender: (newTender: Partial<Tender>) => void;
+  /** Followed tenders keyed by tender id. Starred means followed. */
+  followed?: Record<string, { starred: boolean; notes: string }>;
+  onToggleFollow?: (tender: Tender) => Promise<void> | void;
+  onSaveNotes?: (tender: Tender, notes: EvaluationNotes) => Promise<void>;
 }
 
 const MetricCard: React.FC<{ label: string; value: number; detail: string; icon: React.ReactNode }> = ({ label, value, detail, icon }) => (
@@ -49,8 +56,31 @@ export const TenderList: React.FC<TenderListProps> = ({
   onSelectTenderForCosting,
   onSelectTenderForProposal,
   onAddNewTender,
+  followed = {},
+  onToggleFollow,
+  onSaveNotes,
 }) => {
   const [analysisTender, setAnalysisTender] = useState<Tender | null>(null);
+  const [notesTender, setNotesTender] = useState<Tender | null>(null);
+  const [showFollowedOnly, setShowFollowedOnly] = useState(false);
+  const isFollowed = (id: string) => !!followed[id]?.starred;
+  const followedCount = tenders.filter((t) => isFollowed(t.id)).length;
+
+  const exportFollowedCsv = () => {
+    const rows = tenders.filter((t) => isFollowed(t.id)).map((t) => ({
+      refNumber: t.refNumber, title: t.title, authority: t.authority, portal: t.portal,
+      budget: t.budget > 0 ? String(t.budget) : '', currency: t.currency,
+      submissionDeadline: t.submissionDeadline, sourceUrl: (t as any).sourceUrl || '',
+      notes: parseNotes(followed[t.id]?.notes),
+    }));
+    const blob = new Blob(['\uFEFF' + buildFollowedCsv(rows)], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'followed_tenders.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSector, setSelectedSector] = useState<string>('All');
@@ -86,7 +116,9 @@ export const TenderList: React.FC<TenderListProps> = ({
       selectedPortal === 'All' || t.portal.toLowerCase().includes(selectedPortal.toLowerCase());
     const matchesBudget = t.budget >= minBudget;
 
-    return matchesSearch && matchesSector && matchesPortal && matchesBudget;
+    const matchesFollowed = !showFollowedOnly || isFollowed(t.id);
+
+    return matchesSearch && matchesSector && matchesPortal && matchesBudget && matchesFollowed;
   });
 
   const handleCreateCustomTender = (e: React.FormEvent) => {
@@ -183,6 +215,20 @@ export const TenderList: React.FC<TenderListProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowFollowedOnly((v) => !v)}
+              className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold border transition ${showFollowedOnly ? 'bg-[#4d6b2f]/10 text-[#3f5724] border-[#4d6b2f]' : 'bg-stone-100 text-stone-700 border-stone-200 hover:bg-stone-200'}`}
+            >
+              <Star className="w-3.5 h-3.5" /> Followed ({followedCount})
+            </button>
+            <button
+              onClick={exportFollowedCsv}
+              disabled={followedCount === 0}
+              className="px-3 py-2.5 rounded-xl text-xs font-bold bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200 disabled:opacity-50"
+              title="Download followed tenders with their notes (opens in Excel)"
+            >
+              Export CSV
+            </button>
             {/* Add Custom Tender Intake */}
             <button
               onClick={() => setShowAddModal(true)}
@@ -337,6 +383,24 @@ export const TenderList: React.FC<TenderListProps> = ({
 
                 <div className="flex items-center gap-2">
                   <button
+                    onClick={() => onToggleFollow?.(tender)}
+                    disabled={!onToggleFollow}
+                    aria-pressed={isFollowed(tender.id)}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold border transition disabled:opacity-50 ${isFollowed(tender.id) ? 'bg-amber-50 text-amber-800 border-amber-300' : 'bg-stone-100 text-stone-700 border-stone-200 hover:bg-stone-200'}`}
+                  >
+                    <Star className={`w-3.5 h-3.5 ${isFollowed(tender.id) ? 'fill-amber-400 text-amber-500' : ''}`} />
+                    {isFollowed(tender.id) ? 'Following' : 'Follow'}
+                  </button>
+
+                  <button
+                    onClick={() => setNotesTender(tender)}
+                    disabled={!onSaveNotes}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold bg-stone-100 hover:bg-stone-200 text-[#3f5724] border border-stone-200 transition disabled:opacity-50"
+                  >
+                    Notes
+                  </button>
+
+                  <button
                     onClick={() => setAnalysisTender(tender)}
                     className="px-3 py-1.5 rounded-xl text-xs font-bold bg-stone-100 hover:bg-stone-200 text-[#3f5724] border border-stone-200 transition"
                   >
@@ -477,6 +541,14 @@ export const TenderList: React.FC<TenderListProps> = ({
         </div>
       )}
       {analysisTender && <TenderAnalysisModal tender={analysisTender} onClose={() => setAnalysisTender(null)} />}
+      {notesTender && onSaveNotes && (
+        <TenderNotesModal
+          tender={notesTender}
+          initial={parseNotes(followed[notesTender.id]?.notes)}
+          onSave={(notes) => onSaveNotes(notesTender, notes)}
+          onClose={() => setNotesTender(null)}
+        />
+      )}
     </div>
   );
 };

@@ -451,3 +451,54 @@ export const markAlertAsRead = async (userId: string, alertId: string): Promise<
     handleFirestoreError(err, OperationType.UPDATE, path);
   }
 };
+
+// ---------------------------------------------------------------------------
+// Firestore: followed tenders (bookmarks) with evaluation notes
+// ---------------------------------------------------------------------------
+
+export interface TenderBookmark {
+  tenderId: string;
+  starred: boolean;
+  /** JSON string of EvaluationNotes (see services/tenderNotes.ts). */
+  notes: string;
+}
+
+export const getTenderBookmarks = async (userId: string): Promise<Record<string, TenderBookmark>> => {
+  const path = `users/${userId}/bookmarks`;
+  if (auth.currentUser?.uid !== userId) throw new Error('You can only read your own followed tenders.');
+  try {
+    const snap = await getDocs(collection(db, 'users', userId, 'bookmarks'));
+    const out: Record<string, TenderBookmark> = {};
+    snap.forEach((d) => {
+      const data = d.data() as Partial<TenderBookmark>;
+      out[d.id] = { tenderId: d.id, starred: data.starred === true, notes: typeof data.notes === 'string' ? data.notes : '' };
+    });
+    return out;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.LIST, path);
+  }
+};
+
+export const saveTenderBookmark = async (
+  userId: string,
+  tenderId: string,
+  title: string,
+  patch: { starred: boolean; notes: string }
+): Promise<void> => {
+  const path = `users/${userId}/bookmarks/${tenderId}`;
+  if (auth.currentUser?.uid !== userId) throw new Error('You can only change your own followed tenders.');
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(tenderId)) throw new Error('This tender id cannot be saved. Tell the team which notice it was.');
+  try {
+    await setDoc(doc(db, 'users', userId, 'bookmarks', tenderId), {
+      userId,
+      tenderId,
+      title: title.slice(0, 256),
+      status: 'Followed',
+      starred: patch.starred,
+      notes: patch.notes,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, path);
+  }
+};
