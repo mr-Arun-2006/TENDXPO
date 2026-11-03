@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { User } from 'firebase/auth';
 import {
   ChatSpace,
@@ -54,7 +54,13 @@ export const GoogleChatModal: React.FC<GoogleChatModalProps> = ({
 }) => {
   const [spaces, setSpaces] = useState<ChatSpace[]>([]);
   const [selectedSpace, setSelectedSpace] = useState<ChatSpace | null>(null);
+  // Report only real changes. The first run (mount) must not clear a saved alert space.
+  const reportedOnce = useRef(false);
   useEffect(() => {
+    if (!reportedOnce.current) {
+      reportedOnce.current = true;
+      return;
+    }
     onAlertSpaceChange?.(selectedSpace);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSpace]);
