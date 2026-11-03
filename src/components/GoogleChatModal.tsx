@@ -38,6 +38,8 @@ interface GoogleChatModalProps {
   onAuthSuccess: (user: User, token: string) => void;
   onAuthLogout: () => void;
   activeTender?: Tender | null;
+  /** Called when the user picks a space, so deadline alerts can be posted there. */
+  onAlertSpaceChange?: (space: ChatSpace | null) => void;
 }
 
 export const GoogleChatModal: React.FC<GoogleChatModalProps> = ({
@@ -48,9 +50,14 @@ export const GoogleChatModal: React.FC<GoogleChatModalProps> = ({
   onAuthSuccess,
   onAuthLogout,
   activeTender,
+  onAlertSpaceChange,
 }) => {
   const [spaces, setSpaces] = useState<ChatSpace[]>([]);
   const [selectedSpace, setSelectedSpace] = useState<ChatSpace | null>(null);
+  useEffect(() => {
+    onAlertSpaceChange?.(selectedSpace);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSpace]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messageInput, setMessageInput] = useState('');
   const [isLoadingSpaces, setIsLoadingSpaces] = useState(false);
