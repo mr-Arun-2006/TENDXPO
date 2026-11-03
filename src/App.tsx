@@ -216,6 +216,33 @@ export default function App() {
   }, [liveEvents]);
 
   // Fetch tenders (official TED notices + clearly labelled sample data)
+  // Live TED notices already seen this session. The first load is a silent baseline.
+  const seenLiveIds = useRef<Set<string> | null>(null);
+  const announceNewLiveNotices = (list: Tender[]) => {
+    const live = list.filter((t) => t.dataSource === 'live-ted');
+    if (seenLiveIds.current === null) {
+      seenLiveIds.current = new Set(live.map((t) => t.id));
+      return;
+    }
+    const fresh = live.filter((t) => !seenLiveIds.current!.has(t.id));
+    if (fresh.length === 0) return;
+    fresh.forEach((t) => seenLiveIds.current!.add(t.id));
+    setNotifications((prev) => [
+      ...fresh.map((t): PortalNotification => ({
+        id: `ted-${t.id}`,
+        timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+        type: 'New Tender',
+        title: 'New official TED notice',
+        message: t.title,
+        tenderId: t.id,
+        severity: 'success',
+        read: false,
+      })),
+      ...prev,
+    ]);
+    showToast(`${fresh.length} new official TED notice${fresh.length > 1 ? 's' : ''}`);
+  };
+
   const fetchTenders = async (refresh = false) => {
     try {
       const res = await fetch(refresh ? '/api/tenders?refresh=1' : '/api/tenders');
@@ -238,6 +265,7 @@ export default function App() {
           ...fetchedTenders,
           ...prev.filter((t) => t.dataSource === 'user' && !fetchedTenders.some((x) => x.id === t.id)),
         ]);
+        announceNewLiveNotices(fetchedTenders);
         if (!selectedTender && fetchedTenders.length > 0) {
           setSelectedTender(fetchedTenders[0]);
         }
@@ -259,6 +287,22 @@ export default function App() {
       console.warn('Commodities fetch error:', err);
     }
   };
+
+  // Live feed that works on Vercel: the WebSocket and server timers cannot keep running there,
+  // so refresh TED every five minutes while the tab is open, and again when it comes back into view.
+  useEffect(() => {
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') fetchTenders(true);
+    };
+    const id = window.setInterval(refreshIfVisible, 5 * 60_000);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
+    };
+    // fetchTenders reads the signed-in user, so the timer is rebuilt when the user changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.uid]);
 
   useEffect(() => {
     fetchTenders();
