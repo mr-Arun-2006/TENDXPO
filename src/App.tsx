@@ -23,6 +23,9 @@ import { usePortalWebSocket } from './hooks/usePortalWebSocket';
 import { User } from 'firebase/auth';
 import { getCompanyProfile, getTenderBookmarks, getUserTenderStates, initAuth, logout, saveCompanyProfile, saveTenderBookmark, saveUserTenderState, TenderBookmark } from './services/firebase';
 import { EvaluationNotes, serializeNotes } from './services/tenderNotes';
+import { ChatSpace, sendMessageToSpace } from './services/googleChat';
+import { formatChatAlert, markAlertSent, readSentAlerts } from './services/alertState';
+import { useRef } from 'react';
 
 const APP_TABS = ['dashboard','tenders','assistant','pipeline','feasibility','costing','proposal','commodities','sources','account'];
 
@@ -44,6 +47,15 @@ export default function App() {
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(DEFAULT_COMPANY_PROFILE);
   const [notifications, setNotifications] = useState<PortalNotification[]>(INITIAL_NOTIFICATIONS);
   const [bookmarks, setBookmarks] = useState<Record<string, TenderBookmark>>({});
+  const [alertSpace, setAlertSpace] = useState<ChatSpace | null>(() => {
+    try {
+      const raw = window.localStorage.getItem('tendo.alertSpace');
+      return raw ? (JSON.parse(raw) as ChatSpace) : null;
+    } catch {
+      return null;
+    }
+  });
+  const chatAlertsInFlight = useRef<Set<string>>(new Set());
 
   // Active selected tender for deep dive
   const [selectedTender, setSelectedTender] = useState<Tender | null>(null);
@@ -110,6 +122,24 @@ export default function App() {
       return fresh.length ? [...fresh, ...prev] : prev;
     });
   }, [tenders, bookmarks]);
+
+  // Post deadline warnings to the chosen Google Chat space. Uses the user's own connection.
+  useEffect(() => {
+    if (!googleAccessToken || !alertSpace) return;
+    const sent = new Set(readSentAlerts());
+    notifications
+      .filter((n) => n.type === 'Deadline Warning' && !sent.has(n.id) && !chatAlertsInFlight.current.has(n.id))
+      .forEach((n) => {
+        chatAlertsInFlight.current.add(n.id);
+        sendMessageToSpace(googleAccessToken, alertSpace.name, formatChatAlert(n.title, n.message))
+          .then(() => markAlertSent(n.id))
+          .catch((err: any) => {
+            console.warn('Google Chat alert failed:', err?.message);
+            showToast('Could not post an alert to Google Chat. Reconnect Google Chat to resume alerts.');
+          })
+          .finally(() => chatAlertsInFlight.current.delete(n.id));
+      });
+  }, [notifications, googleAccessToken, alertSpace]);
 
   const requireSignIn = (): User | null => {
     if (currentUser) return currentUser;
@@ -665,6 +695,15 @@ export default function App() {
           setCurrentUser(user);
           setGoogleAccessToken(token);
           showToast(`Connected to Google Chat as ${user.displayName || user.email}`);
+        }}
+        onAlertSpaceChange={(space) => {
+          setAlertSpace(space);
+          try {
+            if (space) window.localStorage.setItem('tendo.alertSpace', JSON.stringify(space));
+            else window.localStorage.removeItem('tendo.alertSpace');
+          } catch {
+            /* storage unavailable: alert space resets on reload */
+          }
         }}
         onAuthLogout={() => {
           setCurrentUser(null);
